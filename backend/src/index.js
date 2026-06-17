@@ -39,3 +39,5 @@ app.get("/api/prices/:itemId", async (req, res) => {
 app.listen(4000, () => {
   console.log("Backend działa na http://localhost:4000");
 });
+
+// TEST GIT
