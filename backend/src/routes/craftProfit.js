@@ -6,7 +6,6 @@ import {
   findItemInDump,
   getCraftResources,
   normalizeResource,
-  applyEnchantToMaterial,
   fetchAlbionPrices,
   getLowestSellOffer,
   getHighestBuyOffer,
@@ -14,9 +13,35 @@ import {
 
 const router = express.Router();
 
+function isRefinedMaterial(materialId) {
+  return (
+    materialId.includes("_CLOTH") ||
+    materialId.includes("_LEATHER") ||
+    materialId.includes("_METALBAR") ||
+    materialId.includes("_PLANKS") ||
+    materialId.includes("_STONEBLOCK")
+  );
+}
+
+function applyTierAndEnchantToMaterial(materialId, craftedItemId, enchant) {
+  const tier = craftedItemId.split("_")[0];
+  const fixedMaterialId = materialId.replace(/^T\d+_/, `${tier}_`);
+
+  if (!enchant || enchant === "0") {
+    return fixedMaterialId;
+  }
+
+  if (isRefinedMaterial(fixedMaterialId)) {
+    return `${fixedMaterialId}_LEVEL${enchant}`;
+  }
+
+  return `${fixedMaterialId}@${enchant}`;
+}
+
 async function calculateCraftProfitForItem({
   itemId,
   returnRate,
+  stationFee,
   feePercent,
   focusCost,
   quality,
@@ -34,7 +59,11 @@ async function calculateCraftProfitForItem({
     .filter((resource) => resource !== null)
     .map((resource) => ({
       ...resource,
-      item_id: applyEnchantToMaterial(resource.item_id, enchant),
+      item_id: applyTierAndEnchantToMaterial(
+        resource.item_id,
+        baseItemId,
+        enchant,
+      ),
     }));
 
   if (!resources.length) return null;
@@ -43,6 +72,10 @@ async function calculateCraftProfitForItem({
     ...resources.map((resource) => resource.item_id),
     itemId,
   ];
+
+  console.log("CRAFT ITEM:", itemId);
+  console.log("PRICE IDS:", priceItemIds);
+
   const prices = await fetchAlbionPrices(priceItemIds, quality);
 
   const materials = resources.map((resource) => {
@@ -52,17 +85,16 @@ async function calculateCraftProfitForItem({
       item_id: resource.item_id,
       amount: resource.amount,
       price: offer.price,
-      city: offer.city,
+      city: offer.price > 0 ? offer.city : "brak ceny",
       updated: offer.updated,
       total: offer.price * resource.amount,
     };
   });
 
-  const missingPrices = materials.some((material) => material.price <= 0);
-  if (missingPrices) return null;
-
   const sellOffer = getHighestBuyOffer(prices, itemId);
-  if (sellOffer.price <= 0) return null;
+  const missingMaterialPrices = materials.some(
+    (material) => material.price <= 0,
+  );
 
   const rawMaterialCost = materials.reduce(
     (sum, material) => sum + material.total,
@@ -72,20 +104,30 @@ async function calculateCraftProfitForItem({
   const returnedValue = rawMaterialCost * (returnRate / 100);
   const realMaterialCost = rawMaterialCost - returnedValue;
   const fee = sellOffer.price * (feePercent / 100);
-  const totalCost = realMaterialCost + fee;
+  const totalCost = realMaterialCost + stationFee + fee;
   const revenue = sellOffer.price;
-  const profit = revenue - totalCost;
-  const margin = totalCost > 0 ? (profit / totalCost) * 100 : 0;
-  const profitPerFocus = focusCost > 0 ? profit / focusCost : 0;
+
+  const profit = missingMaterialPrices ? 0 : revenue - totalCost;
+  const margin =
+    !missingMaterialPrices && totalCost > 0 ? (profit / totalCost) * 100 : 0;
+  const profitPerFocus =
+    !missingMaterialPrices && focusCost > 0 ? profit / focusCost : 0;
 
   return {
     item_id: itemId,
+    base_item_id: baseItemId,
+    enchant,
+    quality,
     sellPrice: sellOffer.price,
-    sellCity: sellOffer.city,
-    fee,
+    sellCity: sellOffer.price > 0 ? sellOffer.city : "brak ceny",
+    sellUpdated: sellOffer.updated,
     returnRate,
+    stationFee,
+    feePercent,
+    fee,
     focusCost,
     materials,
+    missingMaterialPrices,
     rawMaterialCost,
     returnedValue,
     realMaterialCost,
@@ -103,7 +145,8 @@ router.get("/scan", async (req, res) => {
     const enchant = String(req.query.enchant || "0");
     const quality = String(req.query.quality || "1");
     const returnRate = getNumber(req.query.returnRate, 15.2);
-    const feePercent = getNumber(req.query.feePercent, 6.5);
+    const stationFee = getNumber(req.query.stationFee, 0);
+    const feePercent = getNumber(req.query.feePercent, 0);
     const focusCost = getNumber(req.query.focusCost, 0);
 
     const candidateItems = items.map((item) => {
@@ -117,6 +160,7 @@ router.get("/scan", async (req, res) => {
       const result = await calculateCraftProfitForItem({
         itemId,
         returnRate,
+        stationFee,
         feePercent,
         focusCost,
         quality,
@@ -140,22 +184,59 @@ router.get("/scan", async (req, res) => {
 router.post("/:itemId", async (req, res) => {
   try {
     const itemId = decodeURIComponent(req.params.itemId);
-    const returnRate = getNumber(req.body.returnRate);
+    const baseItemId = itemId.split("@")[0];
+
+    const returnRate = getNumber(req.body.returnRate, 15.2);
+    const stationFee = getNumber(req.body.stationFee, 0);
     const feePercent = getNumber(req.body.feePercent, 0);
-    const focusCost = getNumber(req.body.focusCost);
+    const focusCost = getNumber(req.body.focusCost, 0);
     const quality = String(req.body.quality || "1");
 
-    const result = await calculateCraftProfitForItem({
+    let result = await calculateCraftProfitForItem({
       itemId,
       returnRate,
+      stationFee,
       feePercent,
       focusCost,
       quality,
     });
 
+    if (!result && itemId !== baseItemId) {
+      result = await calculateCraftProfitForItem({
+        itemId: baseItemId,
+        returnRate,
+        stationFee,
+        feePercent,
+        focusCost,
+        quality,
+      });
+    }
+
     if (!result) {
-      return res.status(404).json({
-        error: `Nie udało się obliczyć profitu dla: ${itemId}`,
+      return res.json({
+        item_id: itemId,
+        base_item_id: baseItemId,
+        enchant: itemId.includes("@") ? itemId.split("@")[1] : "0",
+        quality,
+        sellPrice: 0,
+        sellCity: "-",
+        sellUpdated: "",
+        returnRate,
+        stationFee,
+        feePercent,
+        fee: 0,
+        focusCost,
+        materials: [],
+        missingMaterialPrices: true,
+        rawMaterialCost: 0,
+        returnedValue: 0,
+        realMaterialCost: 0,
+        totalCost: 0,
+        revenue: 0,
+        profit: 0,
+        margin: 0,
+        profitPerFocus: 0,
+        warning: `Brak danych craftingu dla: ${itemId}`,
       });
     }
 

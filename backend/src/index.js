@@ -1,148 +1,26 @@
-function getHighestBuyOffer(prices, itemId) {
-  const validOffers = prices
-    .filter((price) => price.item_id === itemId)
-    .filter((price) => getNumber(price.buy_price_max) > 0)
-    .map((price) => ({
-      price: getNumber(price.buy_price_max),
-      city: price.city,
-      updated: price.buy_price_max_date,
-    }))
-    .sort((a, b) => b.price - a.price);
+import express from "express";
+import cors from "cors";
 
-  if (!validOffers.length) {
-    return {
-      price: 0,
-      city: "-",
-      updated: "",
-    };
-  }
+import pricesRouter from "./routes/prices.js";
+import itemsRouter from "./routes/items.js";
+import blackMarketRouter from "./routes/blackMarket.js";
+import craftProfitRouter from "./routes/craftProfit.js";
 
-  return validOffers[0];
-}
+const app = express();
+const PORT = 4000;
 
-async function calculateCraftProfitForItem({
-  itemId,
-  returnRate,
-  feePercent,
-  focusCost,
-  quality,
-}) {
-  const baseItemId = itemId.split("@")[0];
-  const enchant = itemId.includes("@") ? itemId.split("@")[1] : "0";
+app.use(cors());
+app.use(express.json());
 
-  const itemsDump = await getItemsDump();
-  const item = findItemInDump(itemsDump, baseItemId);
+app.get("/health", (req, res) => {
+  res.json({ status: "ok" });
+});
 
-  if (!item) return null;
+app.use("/api/prices", pricesRouter);
+app.use("/api/items", itemsRouter);
+app.use("/api/black-market", blackMarketRouter);
+app.use("/api/craft-profit", craftProfitRouter);
 
-  const resources = getCraftResources(item)
-    .map(normalizeResource)
-    .filter((resource) => resource !== null)
-    .map((resource) => ({
-      ...resource,
-      item_id: applyEnchantToMaterial(resource.item_id, enchant),
-    }));
-
-  if (!resources.length) return null;
-
-  const priceItemIds = [
-    ...resources.map((resource) => resource.item_id),
-    itemId,
-  ];
-
-  const prices = await fetchAlbionPrices(priceItemIds, quality);
-
-  const materials = resources.map((resource) => {
-    const offer = getLowestSellOffer(prices, resource.item_id);
-
-    return {
-      item_id: resource.item_id,
-      amount: resource.amount,
-      price: offer.price,
-      city: offer.city,
-      updated: offer.updated,
-      total: offer.price * resource.amount,
-    };
-  });
-
-  const missingPrices = materials.some((material) => material.price <= 0);
-  if (missingPrices) return null;
-
-  const sellOffer = getHighestBuyOffer(prices, itemId);
-
-  if (sellOffer.price <= 0) return null;
-
-  const rawMaterialCost = materials.reduce(
-    (sum, material) => sum + material.total,
-    0,
-  );
-
-  const returnedValue = rawMaterialCost * (returnRate / 100);
-  const realMaterialCost = rawMaterialCost - returnedValue;
-  const fee = sellOffer.price * (feePercent / 100);
-  const totalCost = realMaterialCost + fee;
-  const revenue = sellOffer.price;
-  const profit = revenue - totalCost;
-  const margin = totalCost > 0 ? (profit / totalCost) * 100 : 0;
-  const profitPerFocus = focusCost > 0 ? profit / focusCost : 0;
-
-  return {
-    item_id: itemId,
-    sellPrice: sellOffer.price,
-    sellCity: sellOffer.city,
-    fee,
-    returnRate,
-    focusCost,
-    materials,
-    rawMaterialCost,
-    returnedValue,
-    realMaterialCost,
-    totalCost,
-    revenue,
-    profit,
-    margin,
-    profitPerFocus,
-  };
-}
-
-app.get("/api/craft-profit/scan", async (req, res) => {
-  try {
-    const tier = String(req.query.tier || "T4");
-    const enchant = String(req.query.enchant || "0");
-    const quality = String(req.query.quality || "1");
-    const returnRate = getNumber(req.query.returnRate, 15.2);
-    const feePercent = getNumber(req.query.feePercent, 6.5);
-    const focusCost = getNumber(req.query.focusCost, 0);
-
-    const candidateItems = items.map((item) => {
-      const baseId = `${tier}_${item.id}`;
-      return enchant === "0" ? baseId : `${baseId}@${enchant}`;
-    });
-
-    const results = [];
-
-    for (const itemId of candidateItems) {
-      const result = await calculateCraftProfitForItem({
-        itemId,
-        returnRate,
-        feePercent,
-        focusCost,
-        quality,
-      });
-
-      if (result) {
-        results.push(result);
-      }
-    }
-
-    results.sort((a, b) => b.profit - a.profit);
-
-    res.json(results);
-  } catch (error) {
-    console.error("CRAFT PROFIT SCAN ERROR:", error);
-
-    res.status(500).json({
-      error: "Nie udało się zeskanować craft profitu",
-    });
-  }
+app.listen(PORT, () => {
+  console.log(`Backend działa na http://localhost:${PORT}`);
 });

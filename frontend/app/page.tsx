@@ -30,6 +30,36 @@ type ItemResult = {
   id: string;
 };
 
+type Material = {
+  item_id: string;
+  amount: number;
+  price: number;
+  city: string;
+  updated: string;
+  total: number;
+};
+
+export type CraftData = {
+  item_id: string;
+  sellPrice: number;
+  sellCity: string;
+  sellUpdated: string;
+  returnRate: number;
+  stationFee: number;
+  focusCost: number;
+  materials: Material[];
+  rawMaterialCost: number;
+  returnedValue: number;
+  realMaterialCost: number;
+  totalCost: number;
+  revenue: number;
+  profit: number;
+  margin: number;
+  profitPerFocus: number;
+  fee: number;
+  feePercent: number;
+};
+
 const qualities = [
   { label: "Normal", value: "1" },
   { label: "Good", value: "2" },
@@ -59,8 +89,11 @@ export default function Home() {
 
   const [prices, setPrices] = useState<Price[]>([]);
   const [blackMarket, setBlackMarket] = useState<BlackMarketStats | null>(null);
+  const [craftData, setCraftData] = useState<CraftData | null>(null);
+
   const [loading, setLoading] = useState(false);
   const [searchedItem, setSearchedItem] = useState("T4_BAG");
+  const [error, setError] = useState("");
 
   async function searchItems(value: string) {
     setItemSearch(value);
@@ -87,25 +120,64 @@ export default function Home() {
     setShowItemDropdown(false);
   }
 
-  async function fetchPrices() {
+  async function fetchItemData() {
     const itemId = buildItemId(tier, itemType, enchant);
 
     setLoading(true);
+    setError("");
     setSearchedItem(itemId);
+    setPrices([]);
+    setBlackMarket(null);
+    setCraftData(null);
 
-    const [pricesResponse, blackMarketResponse] = await Promise.all([
-      fetch(`http://localhost:4000/api/prices/${itemId}?quality=${quality}`),
-      fetch(
-        `http://localhost:4000/api/black-market/${itemId}?quality=${quality}`,
-      ),
-    ]);
+    try {
+      const safeItemId = encodeURIComponent(itemId);
 
-    const pricesData = await pricesResponse.json();
-    const blackMarketData = await blackMarketResponse.json();
+      const [pricesResponse, blackMarketResponse, craftResponse] =
+        await Promise.all([
+          fetch(
+            `http://localhost:4000/api/prices/${safeItemId}?quality=${quality}`,
+          ),
+          fetch(
+            `http://localhost:4000/api/black-market/${safeItemId}?quality=${quality}`,
+          ),
+          fetch(`http://localhost:4000/api/craft-profit/${safeItemId}`, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              returnRate: 15.2,
+              feePercent: 0,
+              stationFee: 0,
+              focusCost: 0,
+              sellPrice: 0,
+              quality,
+            }),
+          }),
+        ]);
 
-    setPrices(pricesData.filter((p: Price) => p.city !== "BlackMarket"));
-    setBlackMarket(blackMarketData);
-    setLoading(false);
+      const pricesData = await pricesResponse.json();
+      const blackMarketData = await blackMarketResponse.json();
+      const craftResult = await craftResponse.json();
+
+      if (pricesResponse.ok && Array.isArray(pricesData)) {
+        setPrices(pricesData.filter((p: Price) => p.city !== "BlackMarket"));
+      }
+
+      if (blackMarketResponse.ok) {
+        setBlackMarket(blackMarketData);
+      }
+
+      if (craftResponse.ok) {
+        setCraftData(craftResult);
+      }
+    } catch (requestError) {
+      console.error("FETCH ITEM DATA ERROR:", requestError);
+      setError("Nie udało się pobrać danych z backendu");
+    } finally {
+      setLoading(false);
+    }
   }
 
   const selectedQualityLabel = qualities.find(
@@ -165,7 +237,7 @@ export default function Home() {
                 setEnchant={setEnchant}
                 quality={quality}
                 setQuality={setQuality}
-                fetchPrices={fetchPrices}
+                fetchPrices={fetchItemData}
                 activeTab="market"
                 buildItemId={buildItemId}
               />
@@ -213,6 +285,7 @@ export default function Home() {
                     <h2 className="text-3xl font-black text-yellow-200">
                       {displayItemName}
                     </h2>
+
                     <p className="text-yellow-100/60">
                       Quality: {selectedQualityLabel}
                     </p>
@@ -220,12 +293,16 @@ export default function Home() {
                 </div>
               </div>
 
+              {error && <p className="text-red-400 font-bold mb-4">{error}</p>}
+
+              {loading && (
+                <p className="text-yellow-100/70 mb-4">
+                  Pobieram ceny, Black Market i materiały...
+                </p>
+              )}
+
               {albionTab === "prices" && (
                 <>
-                  {loading && (
-                    <p className="text-yellow-100/70 mb-4">Ładowanie...</p>
-                  )}
-
                   {blackMarket && (
                     <BlackMarketStatsBox blackMarket={blackMarket} />
                   )}
@@ -245,6 +322,7 @@ export default function Home() {
                   itemName={displayItemName}
                   itemId={searchedItem}
                   quality={selectedQualityLabel || "Normal"}
+                  craftData={craftData}
                 />
               )}
             </section>
