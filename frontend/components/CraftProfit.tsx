@@ -20,6 +20,8 @@ type Material = {
 
 type CraftResult = {
   item_id: string;
+  base_item_id: string;
+  enchant: string;
   quality: string;
   sellPrice: number;
   sellCity: string;
@@ -114,8 +116,10 @@ export default function CraftProfit({ itemName, itemId, quality }: Props) {
     setMaterials([]);
 
     try {
+      const safeItemId = encodeURIComponent(itemId);
+
       const response = await fetch(
-        `http://localhost:4000/api/craft-profit/${itemId}`,
+        `http://localhost:4000/api/craft-profit/${safeItemId}`,
         {
           method: "POST",
           headers: {

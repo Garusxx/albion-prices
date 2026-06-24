@@ -1,24 +1,18 @@
-function getHighestBuyOffer(prices, itemId) {
-  const validOffers = prices
-    .filter((price) => price.item_id === itemId)
-    .filter((price) => getNumber(price.buy_price_max) > 0)
-    .map((price) => ({
-      price: getNumber(price.buy_price_max),
-      city: price.city,
-      updated: price.buy_price_max_date,
-    }))
-    .sort((a, b) => b.price - a.price);
+import express from "express";
+import { items } from "../data/items.js";
+import { getNumber } from "../utils/numbers.js";
+import {
+  getItemsDump,
+  findItemInDump,
+  getCraftResources,
+  normalizeResource,
+  applyEnchantToMaterial,
+  fetchAlbionPrices,
+  getLowestSellOffer,
+  getHighestBuyOffer,
+} from "../utils/albionApi.js";
 
-  if (!validOffers.length) {
-    return {
-      price: 0,
-      city: "-",
-      updated: "",
-    };
-  }
-
-  return validOffers[0];
-}
+const router = express.Router();
 
 async function calculateCraftProfitForItem({
   itemId,
@@ -49,7 +43,6 @@ async function calculateCraftProfitForItem({
     ...resources.map((resource) => resource.item_id),
     itemId,
   ];
-
   const prices = await fetchAlbionPrices(priceItemIds, quality);
 
   const materials = resources.map((resource) => {
@@ -69,7 +62,6 @@ async function calculateCraftProfitForItem({
   if (missingPrices) return null;
 
   const sellOffer = getHighestBuyOffer(prices, itemId);
-
   if (sellOffer.price <= 0) return null;
 
   const rawMaterialCost = materials.reduce(
@@ -105,7 +97,7 @@ async function calculateCraftProfitForItem({
   };
 }
 
-app.get("/api/craft-profit/scan", async (req, res) => {
+router.get("/scan", async (req, res) => {
   try {
     const tier = String(req.query.tier || "T4");
     const enchant = String(req.query.enchant || "0");
@@ -130,9 +122,7 @@ app.get("/api/craft-profit/scan", async (req, res) => {
         quality,
       });
 
-      if (result) {
-        results.push(result);
-      }
+      if (result) results.push(result);
     }
 
     results.sort((a, b) => b.profit - a.profit);
@@ -146,3 +136,37 @@ app.get("/api/craft-profit/scan", async (req, res) => {
     });
   }
 });
+
+router.post("/:itemId", async (req, res) => {
+  try {
+    const itemId = decodeURIComponent(req.params.itemId);
+    const returnRate = getNumber(req.body.returnRate);
+    const feePercent = getNumber(req.body.feePercent, 0);
+    const focusCost = getNumber(req.body.focusCost);
+    const quality = String(req.body.quality || "1");
+
+    const result = await calculateCraftProfitForItem({
+      itemId,
+      returnRate,
+      feePercent,
+      focusCost,
+      quality,
+    });
+
+    if (!result) {
+      return res.status(404).json({
+        error: `Nie udało się obliczyć profitu dla: ${itemId}`,
+      });
+    }
+
+    res.json(result);
+  } catch (error) {
+    console.error("CRAFT PROFIT ERROR:", error);
+
+    res.status(500).json({
+      error: "Nie udało się obliczyć craft profitu",
+    });
+  }
+});
+
+export default router;
