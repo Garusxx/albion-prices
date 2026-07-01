@@ -3,6 +3,8 @@ import { getNumber } from "./numbers.js";
 
 const ITEMS_URL =
   "https://raw.githubusercontent.com/ao-data/ao-bin-dumps/master/items.json";
+const FORMATTED_ITEMS_URL =
+  "https://raw.githubusercontent.com/ao-data/ao-bin-dumps/master/formatted/items.json";
 
 export async function fetchAlbionPrices(
   itemIds,
@@ -71,6 +73,7 @@ function flattenItems(value) {
 }
 
 let cachedItems = null;
+let cachedFormattedItems = null;
 
 export async function getItemsDump() {
   if (cachedItems) {
@@ -88,8 +91,43 @@ export async function getItemsDump() {
   return cachedItems;
 }
 
+export async function getFormattedItemsDump() {
+  if (cachedFormattedItems) {
+    return cachedFormattedItems;
+  }
+
+  const response = await fetch(FORMATTED_ITEMS_URL);
+  if (!response.ok) {
+    throw new Error("Nie udało się pobrać formatted/items.json");
+  }
+
+  const data = await response.json();
+  cachedFormattedItems = Array.isArray(data) ? data : Object.values(data);
+
+  console.log(`Loaded ${cachedFormattedItems.length} formatted Albion items`);
+
+  return cachedFormattedItems;
+}
+
 export function getItemUniqueName(item) {
   return item?.["@uniquename"] || "";
+}
+
+export function getFormattedItemUniqueName(item) {
+  return item?.UniqueName || item?.Index || item?.["@uniquename"] || "";
+}
+
+export function getFormattedItemName(item) {
+  const localizedNames = item?.LocalizedNames || item?.localizednames;
+
+  return (
+    localizedNames?.["EN-US"] ||
+    Object.values(localizedNames || {}).find(
+      (name) => typeof name === "string",
+    ) ||
+    item?.LocalizationNameVariable ||
+    getFormattedItemUniqueName(item)
+  );
 }
 
 export function findItemInDump(itemsDump, itemId) {
@@ -132,12 +170,14 @@ export function applyEnchantToMaterial(materialId, enchant) {
 }
 
 export async function getSearchableItems() {
-  const dump = await getItemsDump();
+  const dump = await getFormattedItemsDump();
 
   return dump
-    .filter((item) => item.Index && item.LocalizedNames?.["EN-US"])
+    .filter(
+      (item) => getFormattedItemUniqueName(item) && getFormattedItemName(item),
+    )
     .map((item) => ({
-      id: item.Index,
-      name: item.LocalizedNames["EN-US"],
+      id: getFormattedItemUniqueName(item),
+      name: getFormattedItemName(item),
     }));
 }

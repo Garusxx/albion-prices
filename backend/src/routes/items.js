@@ -1,32 +1,47 @@
 import express from "express";
-import { getItemsDump } from "../utils/albionApi.js";
+import {
+  getFormattedItemName,
+  getFormattedItemsDump,
+  getFormattedItemUniqueName,
+} from "../utils/albionApi.js";
 
 const router = express.Router();
 
 function getItemName(item) {
-  return (
-    item?.localizednames?.["EN-US"] ||
-    item?.LocalizedNames?.["EN-US"] ||
-    item?.LocalizationNameVariable ||
-    item?.["@uniquename"] ||
-    item?.UniqueName ||
-    item?.Index ||
-    ""
-  );
+  return getFormattedItemName(item);
 }
 
 function getItemId(item) {
-  return item?.["@uniquename"] || item?.UniqueName || item?.Index || "";
+  return getFormattedItemUniqueName(item);
 }
 
 function getItemType(itemId) {
   return itemId.replace(/^T\d+_/, "").replace(/(@\d+|_LEVEL\d+)$/, "");
 }
 
+function normalizeSearchText(value) {
+  return String(value)
+    .toLowerCase()
+    .replace(/\bresitance\b/g, "resistance")
+    .replace(/['’]/g, "")
+    .replace(/[_-]/g, " ")
+    .replace(/[^a-z0-9\s]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function matchesSearch(searchableText, query) {
+  const normalizedSearchableText = normalizeSearchText(searchableText);
+  const normalizedQuery = normalizeSearchText(query);
+  const queryWords = normalizedQuery.split(" ").filter(Boolean);
+
+  return queryWords.every((word) => normalizedSearchableText.includes(word));
+}
+
 router.get("/name/:itemId", async (req, res) => {
   try {
     const itemId = decodeURIComponent(req.params.itemId);
-    const items = await getItemsDump();
+    const items = await getFormattedItemsDump();
     const item = items.find((currentItem) => getItemId(currentItem) === itemId);
 
     if (!item) {
@@ -56,7 +71,7 @@ router.get("/search", async (req, res) => {
 
     if (q.length < 2) return res.json([]);
 
-    const items = await getItemsDump();
+    const items = await getFormattedItemsDump();
 
     const resultsByType = new Map();
 
@@ -66,10 +81,10 @@ router.get("/search", async (req, res) => {
       const isBaseItem = !itemId.includes("@") && !itemId.includes("_LEVEL");
       const itemType = getItemType(itemId);
       const name = getItemName(item);
-      const searchableText = `${name} ${itemId} ${itemType}`.toLowerCase();
+      const searchableText = `${name} ${itemId} ${itemType}`;
 
       if (!isSelectedTier || !isBaseItem) continue;
-      if (!itemType || !name || !searchableText.includes(q)) continue;
+      if (!itemType || !name || !matchesSearch(searchableText, q)) continue;
       if (resultsByType.has(itemType)) continue;
 
       resultsByType.set(itemType, {
