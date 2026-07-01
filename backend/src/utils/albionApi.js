@@ -134,6 +134,12 @@ export function findItemInDump(itemsDump, itemId) {
   return itemsDump.find((item) => getItemUniqueName(item) === itemId);
 }
 
+export function getPriceQualityForItem(item, requestedQuality = "1") {
+  const maxQualityLevel = getNumber(item?.["@maxqualitylevel"], 1);
+
+  return maxQualityLevel > 1 ? requestedQuality : "1";
+}
+
 export function getCraftResources(item) {
   const requirements = item?.craftingrequirements;
   if (!requirements) return [];

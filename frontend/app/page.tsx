@@ -53,6 +53,7 @@ export type CraftData = {
   base_item_id: string;
   enchant: string;
   quality: string;
+  priceQuality?: string;
 
   useFocus: boolean;
   baseReturn: number;

@@ -4,6 +4,7 @@ import {
   getItemsDump,
   findItemInDump,
   getCraftResourceOptions,
+  getPriceQualityForItem,
   normalizeResource,
   fetchAlbionPrices,
   getLowestSellOffer,
@@ -158,28 +159,29 @@ async function calculateCraftProfitForItem({
 
   const recipeOptions = getRecipeResources(item, baseItemId, enchant);
   const craftedAmount = getCraftedAmount(item);
+  const itemPriceQuality = getPriceQualityForItem(item, quality);
 
   if (!recipeOptions.length) return null;
 
-  const priceItemIds = [
+  const materialItemIds = [
     ...new Set(
       recipeOptions.flatMap((resources) =>
         resources.map((resource) => resource.item_id),
       ),
     ),
-    itemId,
   ];
 
   console.log("CRAFT ITEM:", itemId);
-  console.log("PRICE IDS:", priceItemIds);
+  console.log("MATERIAL PRICE IDS:", materialItemIds);
 
-  const prices = await fetchAlbionPrices(priceItemIds, quality);
-  const selectedRecipe = chooseBestRecipe(recipeOptions, prices);
+  const materialPrices = await fetchAlbionPrices(materialItemIds, "1");
+  const itemPrices = await fetchAlbionPrices([itemId], itemPriceQuality);
+  const selectedRecipe = chooseBestRecipe(recipeOptions, materialPrices);
   const materials = selectedRecipe?.materials || [];
 
-  const marketOffer = getHighestBuyOffer(prices, itemId);
+  const marketOffer = getHighestBuyOffer(itemPrices, itemId);
 
-  const blackMarketPrices = await fetchAlbionPrices([itemId], quality, [
+  const blackMarketPrices = await fetchAlbionPrices([itemId], itemPriceQuality, [
     "BlackMarket",
   ]);
 
@@ -214,6 +216,7 @@ async function calculateCraftProfitForItem({
     base_item_id: baseItemId,
     enchant,
     quality,
+    priceQuality: itemPriceQuality,
 
     useFocus,
     baseReturn,

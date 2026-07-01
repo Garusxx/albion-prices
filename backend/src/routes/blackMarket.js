@@ -1,7 +1,12 @@
 import express from "express";
 import { cities, items } from "../data/items.js";
 import { getNumber } from "../utils/numbers.js";
-import { fetchAlbionPrices } from "../utils/albionApi.js";
+import {
+  fetchAlbionPrices,
+  findItemInDump,
+  getItemsDump,
+  getPriceQualityForItem,
+} from "../utils/albionApi.js";
 
 const router = express.Router();
 
@@ -71,10 +76,14 @@ router.get("/scan", async (req, res) => {
 router.get("/:itemId", async (req, res) => {
   const { itemId } = req.params;
   const quality = String(req.query.quality || "1");
-
-  const url = `https://europe.albion-online-data.com/api/v2/stats/history/${itemId}.json?locations=BlackMarket&qualities=${quality}&time-scale=24`;
+  const baseItemId = decodeURIComponent(itemId).split("@")[0];
 
   try {
+    const itemsDump = await getItemsDump();
+    const item = findItemInDump(itemsDump, baseItemId);
+    const priceQuality = getPriceQualityForItem(item, quality);
+    const url = `https://europe.albion-online-data.com/api/v2/stats/history/${itemId}.json?locations=BlackMarket&qualities=${priceQuality}&time-scale=24`;
+
     const response = await fetch(url);
     const data = await response.json();
 
@@ -95,7 +104,7 @@ router.get("/:itemId", async (req, res) => {
 
     res.json({
       item_id: itemId,
-      quality,
+      quality: priceQuality,
       avg_price_7d: avgPrice,
       sold_7d: totalSold,
       days: last7Days,
