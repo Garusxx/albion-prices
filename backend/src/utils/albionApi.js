@@ -138,19 +138,48 @@ export function getCraftResources(item) {
   const requirements = item?.craftingrequirements;
   if (!requirements) return [];
 
-  const resources = requirements.craftresource;
+  const firstRequirement = Array.isArray(requirements)
+    ? requirements[0]
+    : requirements;
+  const resources = firstRequirement?.craftresource;
   if (!resources) return [];
 
   return Array.isArray(resources) ? resources : [resources];
 }
 
+export function getCraftResourceOptions(item) {
+  const requirements = item?.craftingrequirements;
+  if (!requirements) return [];
+
+  const requirementOptions = Array.isArray(requirements)
+    ? requirements
+    : [requirements];
+
+  return requirementOptions
+    .map((requirement) => {
+      const resources = requirement?.craftresource;
+      if (!resources) return [];
+
+      return Array.isArray(resources) ? resources : [resources];
+    })
+    .filter((resources) => resources.length > 0);
+}
+
 export function normalizeResource(resource) {
   const itemId = resource?.["@uniquename"] || "";
   const amount = getNumber(resource?.["@count"], 0);
+  const maxReturnAmount =
+    resource?.["@maxreturnamount"] === undefined
+      ? null
+      : getNumber(resource?.["@maxreturnamount"], 0);
 
   if (!itemId || amount <= 0) return null;
 
-  return { item_id: itemId, amount };
+  return {
+    item_id: itemId,
+    amount,
+    returnable: maxReturnAmount !== 0,
+  };
 }
 
 export function applyEnchantToMaterial(materialId, enchant) {

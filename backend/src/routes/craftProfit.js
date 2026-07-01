@@ -3,7 +3,7 @@ import { getNumber } from "../utils/numbers.js";
 import {
   getItemsDump,
   findItemInDump,
-  getCraftResources,
+  getCraftResourceOptions,
   normalizeResource,
   fetchAlbionPrices,
   getLowestSellOffer,
@@ -22,17 +22,14 @@ function isRefinedMaterial(materialId) {
   );
 }
 
-function applyTierAndEnchantToMaterial(materialId, craftedItemId, enchant) {
-  const tier = craftedItemId.split("_")[0];
-  const fixedMaterialId = materialId.replace(/^T\d+_/, `${tier}_`);
+function applyTierAndEnchantToMaterial(materialId, enchant) {
+  if (!enchant || enchant === "0") return materialId;
 
-  if (!enchant || enchant === "0") return fixedMaterialId;
-
-  if (isRefinedMaterial(fixedMaterialId)) {
-    return `${fixedMaterialId}_LEVEL${enchant}@${enchant}`;
+  if (isRefinedMaterial(materialId)) {
+    return `${materialId}_LEVEL${enchant}@${enchant}`;
   }
 
-  return `${fixedMaterialId}@${enchant}`;
+  return materialId;
 }
 
 function calculateProfit({
@@ -47,9 +44,12 @@ function calculateProfit({
     (sum, material) => sum + material.total,
     0,
   );
+  const returnableMaterialCost = materials
+    .filter((material) => material.returnable)
+    .reduce((sum, material) => sum + material.total, 0);
 
   const activeReturn = baseReturn + (useFocus ? focusBonus : 0);
-  const returnedValue = rawMaterialCost * (activeReturn / 100);
+  const returnedValue = returnableMaterialCost * (activeReturn / 100);
   const realMaterialCost = rawMaterialCost - returnedValue;
   const marketFee = sellPrice * (marketFeePercent / 100);
   const totalCost = realMaterialCost + marketFee;
@@ -60,6 +60,7 @@ function calculateProfit({
   return {
     sellPrice,
     rawMaterialCost,
+    returnableMaterialCost,
     activeReturn,
     returnedValue,
     realMaterialCost,
@@ -69,6 +70,62 @@ function calculateProfit({
     profit,
     margin,
   };
+}
+
+function getRecipeResources(item, baseItemId, enchant) {
+  return getCraftResourceOptions(item)
+    .map((resources) =>
+      resources
+        .map(normalizeResource)
+        .filter((resource) => resource !== null)
+        .map((resource) => ({
+          ...resource,
+          item_id: applyTierAndEnchantToMaterial(resource.item_id, enchant),
+        })),
+    )
+    .filter((resources) => resources.length > 0);
+}
+
+function buildPricedMaterials(resources, prices) {
+  return resources.map((resource) => {
+    const offer = getLowestSellOffer(prices, resource.item_id);
+
+    return {
+      item_id: resource.item_id,
+      amount: resource.amount,
+      returnable: resource.returnable,
+      price: offer.price,
+      city: offer.price > 0 ? offer.city : "brak ceny",
+      updated: offer.updated,
+      total: offer.price * resource.amount,
+    };
+  });
+}
+
+function chooseBestRecipe(recipeOptions, prices) {
+  const pricedRecipes = recipeOptions.map((resources, index) => {
+    const materials = buildPricedMaterials(resources, prices);
+    const missingPrices = materials.filter((material) => material.price <= 0);
+    const rawMaterialCost = materials.reduce(
+      (sum, material) => sum + material.total,
+      0,
+    );
+
+    return {
+      index,
+      materials,
+      missingPriceCount: missingPrices.length,
+      rawMaterialCost,
+    };
+  });
+
+  return pricedRecipes.sort((a, b) => {
+    if (a.missingPriceCount !== b.missingPriceCount) {
+      return a.missingPriceCount - b.missingPriceCount;
+    }
+
+    return a.rawMaterialCost - b.rawMaterialCost;
+  })[0];
 }
 
 async function calculateCraftProfitForItem({
@@ -88,22 +145,16 @@ async function calculateCraftProfitForItem({
 
   if (!item) return null;
 
-  const resources = getCraftResources(item)
-    .map(normalizeResource)
-    .filter((resource) => resource !== null)
-    .map((resource) => ({
-      ...resource,
-      item_id: applyTierAndEnchantToMaterial(
-        resource.item_id,
-        baseItemId,
-        enchant,
-      ),
-    }));
+  const recipeOptions = getRecipeResources(item, baseItemId, enchant);
 
-  if (!resources.length) return null;
+  if (!recipeOptions.length) return null;
 
   const priceItemIds = [
-    ...resources.map((resource) => resource.item_id),
+    ...new Set(
+      recipeOptions.flatMap((resources) =>
+        resources.map((resource) => resource.item_id),
+      ),
+    ),
     itemId,
   ];
 
@@ -111,19 +162,8 @@ async function calculateCraftProfitForItem({
   console.log("PRICE IDS:", priceItemIds);
 
   const prices = await fetchAlbionPrices(priceItemIds, quality);
-
-  const materials = resources.map((resource) => {
-    const offer = getLowestSellOffer(prices, resource.item_id);
-
-    return {
-      item_id: resource.item_id,
-      amount: resource.amount,
-      price: offer.price,
-      city: offer.price > 0 ? offer.city : "brak ceny",
-      updated: offer.updated,
-      total: offer.price * resource.amount,
-    };
-  });
+  const selectedRecipe = chooseBestRecipe(recipeOptions, prices);
+  const materials = selectedRecipe?.materials || [];
 
   const marketOffer = getHighestBuyOffer(prices, itemId);
 
@@ -167,6 +207,8 @@ async function calculateCraftProfitForItem({
     activeReturn: baseReturn + (useFocus ? focusBonus : 0),
     marketFeePercent,
     specLevel,
+    selectedRecipeIndex: selectedRecipe?.index || 0,
+    recipeOptionsCount: recipeOptions.length,
 
     materials,
     missingMaterialPrices,

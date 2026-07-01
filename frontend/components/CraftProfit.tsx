@@ -1,7 +1,7 @@
 "use client";
 
 import Image from "next/image";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import type { CraftData, CraftProfitResult } from "../app/page";
 
 type Props = {
@@ -42,9 +42,12 @@ function calculateResult({
     (sum, material) => sum + material.price * material.amount,
     0,
   );
+  const returnableMaterialCost = materials
+    .filter((material) => material.returnable !== false)
+    .reduce((sum, material) => sum + material.price * material.amount, 0);
 
   const activeReturn = baseReturn + (useFocus ? focusBonus : 0);
-  const returnedValue = rawMaterialCost * (activeReturn / 100);
+  const returnedValue = returnableMaterialCost * (activeReturn / 100);
   const realMaterialCost = rawMaterialCost - returnedValue;
   const marketFee = sellPrice * (marketFeePercent / 100);
   const totalCost = realMaterialCost + marketFee;
@@ -57,6 +60,7 @@ function calculateResult({
     sellCity: "-",
     sellUpdated: "",
     rawMaterialCost,
+    returnableMaterialCost,
     activeReturn,
     returnedValue,
     realMaterialCost,
@@ -94,6 +98,11 @@ function ProfitBox({
         <p className="text-yellow-100/60">Material cost</p>
         <p className="text-right font-bold">
           {formatNumber(result.rawMaterialCost)}
+        </p>
+
+        <p className="text-yellow-100/60">Returnable cost</p>
+        <p className="text-right font-bold">
+          {formatNumber(result.returnableMaterialCost)}
         </p>
 
         <p className="text-yellow-100/60">Return</p>
@@ -137,6 +146,7 @@ function ProfitBox({
 
 function CraftProfitContent({ craftData }: { craftData: CraftData }) {
   const [materials, setMaterials] = useState<Material[]>(craftData.materials);
+  const [lastCalculatedAt, setLastCalculatedAt] = useState("");
 
   const [marketSellPrice, setMarketSellPrice] = useState(
     craftData.market?.sellPrice || 0,
@@ -155,10 +165,57 @@ function CraftProfitContent({ craftData }: { craftData: CraftData }) {
   const [baseReturn, setBaseReturn] = useState(craftData.baseReturn);
   const [focusBonus, setFocusBonus] = useState(craftData.focusBonus);
 
-  const [marketResult, setMarketResult] = useState(craftData.market);
-  const [blackMarketResult, setBlackMarketResult] = useState(
-    craftData.blackMarket,
-  );
+  const marketResult = useMemo(() => {
+    const nextMarket = calculateResult({
+      materials,
+      sellPrice: marketSellPrice,
+      baseReturn,
+      focusBonus,
+      useFocus,
+      marketFeePercent,
+    });
+
+    return {
+      ...nextMarket,
+      sellCity: craftData.market?.sellCity || "-",
+      sellUpdated: craftData.market?.sellUpdated || "",
+    };
+  }, [
+    baseReturn,
+    craftData.market?.sellCity,
+    craftData.market?.sellUpdated,
+    focusBonus,
+    marketFeePercent,
+    marketSellPrice,
+    materials,
+    useFocus,
+  ]);
+
+  const blackMarketResult = useMemo(() => {
+    const nextBlackMarket = calculateResult({
+      materials,
+      sellPrice: blackMarketSellPrice,
+      baseReturn,
+      focusBonus,
+      useFocus,
+      marketFeePercent,
+    });
+
+    return {
+      ...nextBlackMarket,
+      sellCity: craftData.blackMarket?.sellCity || "BlackMarket",
+      sellUpdated: craftData.blackMarket?.sellUpdated || "",
+    };
+  }, [
+    baseReturn,
+    blackMarketSellPrice,
+    craftData.blackMarket?.sellCity,
+    craftData.blackMarket?.sellUpdated,
+    focusBonus,
+    marketFeePercent,
+    materials,
+    useFocus,
+  ]);
 
   function updateMaterialPrice(index: number, value: number) {
     setMaterials((prev) =>
@@ -176,35 +233,7 @@ function CraftProfitContent({ craftData }: { craftData: CraftData }) {
   }
 
   function calculateProfit() {
-    const nextMarket = calculateResult({
-      materials,
-      sellPrice: marketSellPrice,
-      baseReturn,
-      focusBonus,
-      useFocus,
-      marketFeePercent,
-    });
-
-    const nextBlackMarket = calculateResult({
-      materials,
-      sellPrice: blackMarketSellPrice,
-      baseReturn,
-      focusBonus,
-      useFocus,
-      marketFeePercent,
-    });
-
-    setMarketResult({
-      ...nextMarket,
-      sellCity: craftData.market?.sellCity || "-",
-      sellUpdated: craftData.market?.sellUpdated || "",
-    });
-
-    setBlackMarketResult({
-      ...nextBlackMarket,
-      sellCity: craftData.blackMarket?.sellCity || "BlackMarket",
-      sellUpdated: craftData.blackMarket?.sellUpdated || "",
-    });
+    setLastCalculatedAt(new Date().toLocaleTimeString("pl-PL"));
   }
 
   return (
@@ -301,6 +330,7 @@ function CraftProfitContent({ craftData }: { craftData: CraftData }) {
                 <th className="p-3 text-left">Materiał</th>
                 <th className="p-3 text-right">Ilość</th>
                 <th className="p-3 text-right">Cena / szt.</th>
+                <th className="p-3 text-center">Zwrot</th>
                 <th className="p-3 text-left">Miasto</th>
                 <th className="p-3 text-right">Suma</th>
                 <th className="p-3 text-right">Update</th>
@@ -344,6 +374,10 @@ function CraftProfitContent({ craftData }: { craftData: CraftData }) {
                     />
                   </td>
 
+                  <td className="p-3 text-center text-yellow-100/70">
+                    {material.returnable === false ? "nie" : "tak"}
+                  </td>
+
                   <td className="p-3 text-yellow-100/80">{material.city}</td>
 
                   <td className="p-3 text-right font-bold text-yellow-100">
@@ -367,6 +401,12 @@ function CraftProfitContent({ craftData }: { craftData: CraftData }) {
       >
         Oblicz / Przelicz profit
       </button>
+
+      {lastCalculatedAt && (
+        <p className="text-yellow-100/50 text-sm mb-4">
+          Przeliczono: {lastCalculatedAt}
+        </p>
+      )}
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <ProfitBox title="Market Profit" result={marketResult} />

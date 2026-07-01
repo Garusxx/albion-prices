@@ -36,6 +36,7 @@ export type CraftProfitResult = {
   sellCity: string;
   sellUpdated: string;
   rawMaterialCost: number;
+  returnableMaterialCost: number;
   activeReturn: number;
   returnedValue: number;
   realMaterialCost: number;
@@ -62,6 +63,7 @@ export type CraftData = {
   materials: {
     item_id: string;
     amount: number;
+    returnable: boolean;
     price: number;
     city: string;
     updated: string;
@@ -69,6 +71,8 @@ export type CraftData = {
   }[];
 
   missingMaterialPrices: boolean;
+  selectedRecipeIndex?: number;
+  recipeOptionsCount?: number;
 
   market: CraftProfitResult | null;
   blackMarket: CraftProfitResult | null;
