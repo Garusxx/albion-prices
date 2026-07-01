@@ -35,6 +35,7 @@ function applyTierAndEnchantToMaterial(materialId, enchant) {
 function calculateProfit({
   materials,
   sellPrice,
+  craftedAmount,
   baseReturn,
   focusBonus,
   useFocus,
@@ -51,14 +52,15 @@ function calculateProfit({
   const activeReturn = baseReturn + (useFocus ? focusBonus : 0);
   const returnedValue = returnableMaterialCost * (activeReturn / 100);
   const realMaterialCost = rawMaterialCost - returnedValue;
-  const marketFee = sellPrice * (marketFeePercent / 100);
+  const revenue = sellPrice * craftedAmount;
+  const marketFee = revenue * (marketFeePercent / 100);
   const totalCost = realMaterialCost + marketFee;
-  const revenue = sellPrice;
   const profit = revenue - totalCost;
   const margin = totalCost > 0 ? (profit / totalCost) * 100 : 0;
 
   return {
     sellPrice,
+    craftedAmount,
     rawMaterialCost,
     returnableMaterialCost,
     activeReturn,
@@ -70,6 +72,15 @@ function calculateProfit({
     profit,
     margin,
   };
+}
+
+function getCraftedAmount(item) {
+  const requirements = item?.craftingrequirements;
+  const firstRequirement = Array.isArray(requirements)
+    ? requirements[0]
+    : requirements;
+
+  return getNumber(firstRequirement?.["@amountcrafted"], 1);
 }
 
 function getRecipeResources(item, baseItemId, enchant) {
@@ -146,6 +157,7 @@ async function calculateCraftProfitForItem({
   if (!item) return null;
 
   const recipeOptions = getRecipeResources(item, baseItemId, enchant);
+  const craftedAmount = getCraftedAmount(item);
 
   if (!recipeOptions.length) return null;
 
@@ -180,6 +192,7 @@ async function calculateCraftProfitForItem({
   const marketResult = calculateProfit({
     materials,
     sellPrice: marketOffer.price,
+    craftedAmount,
     baseReturn,
     focusBonus,
     useFocus,
@@ -189,6 +202,7 @@ async function calculateCraftProfitForItem({
   const blackMarketResult = calculateProfit({
     materials,
     sellPrice: blackMarketOffer.price,
+    craftedAmount,
     baseReturn,
     focusBonus,
     useFocus,
@@ -207,6 +221,7 @@ async function calculateCraftProfitForItem({
     activeReturn: baseReturn + (useFocus ? focusBonus : 0),
     marketFeePercent,
     specLevel,
+    craftedAmount,
     selectedRecipeIndex: selectedRecipe?.index || 0,
     recipeOptionsCount: recipeOptions.length,
 
@@ -278,6 +293,7 @@ router.post("/:itemId", async (req, res) => {
         activeReturn: baseReturn + (useFocus ? focusBonus : 0),
         marketFeePercent,
         specLevel,
+        craftedAmount: 1,
         materials: [],
         missingMaterialPrices: true,
         market: null,

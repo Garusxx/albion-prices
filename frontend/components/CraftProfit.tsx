@@ -9,6 +9,7 @@ type Props = {
   itemId: string;
   quality: string;
   craftData: CraftData | null;
+  refreshVersion: number;
 };
 
 type Material = CraftData["materials"][number];
@@ -26,6 +27,7 @@ function formatDate(value: string) {
 function calculateResult({
   materials,
   sellPrice,
+  craftedAmount,
   baseReturn,
   focusBonus,
   useFocus,
@@ -33,6 +35,7 @@ function calculateResult({
 }: {
   materials: Material[];
   sellPrice: number;
+  craftedAmount: number;
   baseReturn: number;
   focusBonus: number;
   useFocus: boolean;
@@ -49,14 +52,15 @@ function calculateResult({
   const activeReturn = baseReturn + (useFocus ? focusBonus : 0);
   const returnedValue = returnableMaterialCost * (activeReturn / 100);
   const realMaterialCost = rawMaterialCost - returnedValue;
-  const marketFee = sellPrice * (marketFeePercent / 100);
+  const revenue = sellPrice * craftedAmount;
+  const marketFee = revenue * (marketFeePercent / 100);
   const totalCost = realMaterialCost + marketFee;
-  const revenue = sellPrice;
   const profit = revenue - totalCost;
   const margin = totalCost > 0 ? (profit / totalCost) * 100 : 0;
 
   return {
     sellPrice,
+    craftedAmount,
     sellCity: "-",
     sellUpdated: "",
     rawMaterialCost,
@@ -94,6 +98,12 @@ function ProfitBox({
       <div className="grid grid-cols-2 gap-3 text-sm">
         <p className="text-yellow-100/60">Sell price</p>
         <p className="text-right font-bold">{formatNumber(result.sellPrice)}</p>
+
+        <p className="text-yellow-100/60">Crafted amount</p>
+        <p className="text-right font-bold">{result.craftedAmount}</p>
+
+        <p className="text-yellow-100/60">Revenue</p>
+        <p className="text-right font-bold">{formatNumber(result.revenue)}</p>
 
         <p className="text-yellow-100/60">Material cost</p>
         <p className="text-right font-bold">
@@ -146,7 +156,6 @@ function ProfitBox({
 
 function CraftProfitContent({ craftData }: { craftData: CraftData }) {
   const [materials, setMaterials] = useState<Material[]>(craftData.materials);
-  const [lastCalculatedAt, setLastCalculatedAt] = useState("");
 
   const [marketSellPrice, setMarketSellPrice] = useState(
     craftData.market?.sellPrice || 0,
@@ -169,6 +178,7 @@ function CraftProfitContent({ craftData }: { craftData: CraftData }) {
     const nextMarket = calculateResult({
       materials,
       sellPrice: marketSellPrice,
+      craftedAmount: craftData.craftedAmount,
       baseReturn,
       focusBonus,
       useFocus,
@@ -184,6 +194,7 @@ function CraftProfitContent({ craftData }: { craftData: CraftData }) {
     baseReturn,
     craftData.market?.sellCity,
     craftData.market?.sellUpdated,
+    craftData.craftedAmount,
     focusBonus,
     marketFeePercent,
     marketSellPrice,
@@ -195,6 +206,7 @@ function CraftProfitContent({ craftData }: { craftData: CraftData }) {
     const nextBlackMarket = calculateResult({
       materials,
       sellPrice: blackMarketSellPrice,
+      craftedAmount: craftData.craftedAmount,
       baseReturn,
       focusBonus,
       useFocus,
@@ -211,6 +223,7 @@ function CraftProfitContent({ craftData }: { craftData: CraftData }) {
     blackMarketSellPrice,
     craftData.blackMarket?.sellCity,
     craftData.blackMarket?.sellUpdated,
+    craftData.craftedAmount,
     focusBonus,
     marketFeePercent,
     materials,
@@ -230,10 +243,6 @@ function CraftProfitContent({ craftData }: { craftData: CraftData }) {
           : material,
       ),
     );
-  }
-
-  function calculateProfit() {
-    setLastCalculatedAt(new Date().toLocaleTimeString("pl-PL"));
   }
 
   return (
@@ -394,20 +403,6 @@ function CraftProfitContent({ craftData }: { craftData: CraftData }) {
         </div>
       )}
 
-      <button
-        type="button"
-        onClick={calculateProfit}
-        className="w-full py-4 rounded-xl font-black text-black bg-gradient-to-b from-yellow-300 to-yellow-600 mb-6"
-      >
-        Oblicz / Przelicz profit
-      </button>
-
-      {lastCalculatedAt && (
-        <p className="text-yellow-100/50 text-sm mb-4">
-          Przeliczono: {lastCalculatedAt}
-        </p>
-      )}
-
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <ProfitBox title="Market Profit" result={marketResult} />
         <ProfitBox title="Black Market Profit" result={blackMarketResult} />
@@ -421,6 +416,7 @@ export default function CraftProfit({
   itemId,
   quality,
   craftData,
+  refreshVersion,
 }: Props) {
   return (
     <div className="metal-panel p-6">
@@ -450,7 +446,7 @@ export default function CraftProfit({
 
       {craftData && (
         <CraftProfitContent
-          key={`${craftData.item_id}-${craftData.market?.sellPrice}-${craftData.blackMarket?.sellPrice}`}
+          key={`${craftData.item_id}-${refreshVersion}`}
           craftData={craftData}
         />
       )}

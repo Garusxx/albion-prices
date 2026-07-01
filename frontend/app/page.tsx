@@ -33,6 +33,7 @@ type ItemResult = {
 
 export type CraftProfitResult = {
   sellPrice: number;
+  craftedAmount: number;
   sellCity: string;
   sellUpdated: string;
   rawMaterialCost: number;
@@ -59,6 +60,7 @@ export type CraftData = {
   activeReturn: number;
   marketFeePercent: number;
   specLevel: number;
+  craftedAmount: number;
 
   materials: {
     item_id: string;
@@ -108,6 +110,7 @@ export default function Home() {
   const [prices, setPrices] = useState<Price[]>([]);
   const [blackMarket, setBlackMarket] = useState<BlackMarketStats | null>(null);
   const [craftData, setCraftData] = useState<CraftData | null>(null);
+  const [craftRefreshVersion, setCraftRefreshVersion] = useState(0);
 
   const [loading, setLoading] = useState(false);
   const [searchedItem, setSearchedItem] = useState("T4_BAG");
@@ -229,6 +232,7 @@ export default function Home() {
 
       if (craftResponse.ok) {
         setCraftData(craftResult);
+        setCraftRefreshVersion((version) => version + 1);
       }
     } catch (requestError) {
       console.error("FETCH ITEM DATA ERROR:", requestError);
@@ -379,6 +383,7 @@ export default function Home() {
                   itemId={searchedItem}
                   quality={selectedQualityLabel || "Normal"}
                   craftData={craftData}
+                  refreshVersion={craftRefreshVersion}
                 />
               )}
             </section>
