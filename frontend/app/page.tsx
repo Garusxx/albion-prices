@@ -1,13 +1,14 @@
 "use client";
 
 import Image from "next/image";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 import BlackMarketScanner from "../components/BlackMarketScanner";
 import MarketSearch from "../components/MarketSearch";
 import MarketPrices from "../components/MarketPrices";
 import BlackMarketStatsBox from "../components/BlackMarketStatsBox";
 import CraftProfit from "../components/CraftProfit";
+import { API_BASE_URL } from "../lib/api";
 
 type Price = {
   item_id: string;
@@ -30,34 +31,47 @@ type ItemResult = {
   id: string;
 };
 
-type Material = {
-  item_id: string;
-  amount: number;
-  price: number;
-  city: string;
-  updated: string;
-  total: number;
-};
-
-export type CraftData = {
-  item_id: string;
+export type CraftProfitResult = {
   sellPrice: number;
   sellCity: string;
   sellUpdated: string;
-  returnRate: number;
-  stationFee: number;
-  focusCost: number;
-  materials: Material[];
   rawMaterialCost: number;
+  activeReturn: number;
   returnedValue: number;
   realMaterialCost: number;
+  marketFee: number;
   totalCost: number;
   revenue: number;
   profit: number;
   margin: number;
-  profitPerFocus: number;
-  fee: number;
-  feePercent: number;
+};
+
+export type CraftData = {
+  item_id: string;
+  base_item_id: string;
+  enchant: string;
+  quality: string;
+
+  useFocus: boolean;
+  baseReturn: number;
+  focusBonus: number;
+  activeReturn: number;
+  marketFeePercent: number;
+  specLevel: number;
+
+  materials: {
+    item_id: string;
+    amount: number;
+    price: number;
+    city: string;
+    updated: string;
+    total: number;
+  }[];
+
+  missingMaterialPrices: boolean;
+
+  market: CraftProfitResult | null;
+  blackMarket: CraftProfitResult | null;
 };
 
 const qualities = [
@@ -79,8 +93,8 @@ export default function Home() {
 
   const [tier, setTier] = useState("T4");
   const [itemType, setItemType] = useState("BAG");
-  const [selectedItemName, setSelectedItemName] = useState("Bag");
-  const [itemSearch, setItemSearch] = useState("Bag");
+  const [selectedItemName, setSelectedItemName] = useState("Adept's Bag");
+  const [itemSearch, setItemSearch] = useState("Adept's Bag");
   const [itemResults, setItemResults] = useState<ItemResult[]>([]);
   const [showItemDropdown, setShowItemDropdown] = useState(false);
 
@@ -95,6 +109,35 @@ export default function Home() {
   const [searchedItem, setSearchedItem] = useState("T4_BAG");
   const [error, setError] = useState("");
 
+  useEffect(() => {
+    let ignoreResult = false;
+
+    async function fetchSelectedItemName() {
+      try {
+        const itemId = `${tier}_${itemType}`;
+        const response = await fetch(
+          `${API_BASE_URL}/api/items/name/${encodeURIComponent(itemId)}`,
+        );
+
+        if (!response.ok) return;
+
+        const data = await response.json();
+        if (ignoreResult || typeof data.name !== "string") return;
+
+        setSelectedItemName(data.name);
+        setItemSearch(data.name);
+      } catch (requestError) {
+        console.error("ITEM NAME ERROR:", requestError);
+      }
+    }
+
+    fetchSelectedItemName();
+
+    return () => {
+      ignoreResult = true;
+    };
+  }, [tier, itemType]);
+
   async function searchItems(value: string) {
     setItemSearch(value);
     setShowItemDropdown(true);
@@ -104,12 +147,23 @@ export default function Home() {
       return;
     }
 
-    const response = await fetch(
-      `http://localhost:4000/api/items/search?q=${encodeURIComponent(value)}`,
-    );
+    try {
+      const response = await fetch(
+        `${API_BASE_URL}/api/items/search?q=${encodeURIComponent(value)}&tier=${tier}`,
+      );
 
-    const data = await response.json();
-    setItemResults(data);
+      const data = await response.json();
+
+      if (!response.ok) {
+        setItemResults([]);
+        return;
+      }
+
+      setItemResults(Array.isArray(data) ? data : []);
+    } catch (requestError) {
+      console.error("ITEM SEARCH ERROR:", requestError);
+      setItemResults([]);
+    }
   }
 
   function selectItem(item: ItemResult) {
@@ -136,22 +190,22 @@ export default function Home() {
       const [pricesResponse, blackMarketResponse, craftResponse] =
         await Promise.all([
           fetch(
-            `http://localhost:4000/api/prices/${safeItemId}?quality=${quality}`,
+            `${API_BASE_URL}/api/prices/${safeItemId}?quality=${quality}`,
           ),
           fetch(
-            `http://localhost:4000/api/black-market/${safeItemId}?quality=${quality}`,
+            `${API_BASE_URL}/api/black-market/${safeItemId}?quality=${quality}`,
           ),
-          fetch(`http://localhost:4000/api/craft-profit/${safeItemId}`, {
+          fetch(`${API_BASE_URL}/api/craft-profit/${safeItemId}`, {
             method: "POST",
             headers: {
               "Content-Type": "application/json",
             },
             body: JSON.stringify({
-              returnRate: 15.2,
-              feePercent: 0,
-              stationFee: 0,
-              focusCost: 0,
-              sellPrice: 0,
+              useFocus: false,
+              baseReturn: 15.2,
+              focusBonus: 28.3,
+              marketFeePercent: 0,
+              specLevel: 0,
               quality,
             }),
           }),
@@ -184,9 +238,7 @@ export default function Home() {
     (q) => q.value === quality,
   )?.label;
 
-  const displayItemName = `${tier} ${selectedItemName}${
-    enchant !== "0" ? ` .${enchant}` : ""
-  }`;
+  const displayItemName = `${selectedItemName}${enchant !== "0" ? ` .${enchant}` : ""}`;
 
   return (
     <main className="min-h-screen text-white p-6 bg-gradient-to-b from-[#241a13] via-[#15100c] to-[#090706]">

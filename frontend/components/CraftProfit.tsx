@@ -2,7 +2,7 @@
 
 import Image from "next/image";
 import { useState } from "react";
-import type { CraftData } from "../app/page";
+import type { CraftData, CraftProfitResult } from "../app/page";
 
 type Props = {
   itemName: string;
@@ -23,58 +23,142 @@ function formatDate(value: string) {
   return new Date(value).toLocaleString("pl-PL");
 }
 
-function recalculateCraft(
-  baseData: CraftData,
-  materials: Material[],
-  sellPrice: number,
-  returnRate: number,
-  stationFee: number,
-  focusCost: number,
-): CraftData {
+function calculateResult({
+  materials,
+  sellPrice,
+  baseReturn,
+  focusBonus,
+  useFocus,
+  marketFeePercent,
+}: {
+  materials: Material[];
+  sellPrice: number;
+  baseReturn: number;
+  focusBonus: number;
+  useFocus: boolean;
+  marketFeePercent: number;
+}): CraftProfitResult {
   const rawMaterialCost = materials.reduce(
     (sum, material) => sum + material.price * material.amount,
     0,
   );
 
-  const returnedValue = rawMaterialCost * (returnRate / 100);
+  const activeReturn = baseReturn + (useFocus ? focusBonus : 0);
+  const returnedValue = rawMaterialCost * (activeReturn / 100);
   const realMaterialCost = rawMaterialCost - returnedValue;
-  const fee = baseData.fee || 0;
-  const totalCost = realMaterialCost + stationFee + fee;
+  const marketFee = sellPrice * (marketFeePercent / 100);
+  const totalCost = realMaterialCost + marketFee;
   const revenue = sellPrice;
   const profit = revenue - totalCost;
   const margin = totalCost > 0 ? (profit / totalCost) * 100 : 0;
-  const profitPerFocus = focusCost > 0 ? profit / focusCost : 0;
 
   return {
-    ...baseData,
     sellPrice,
-    returnRate,
-    stationFee,
-    focusCost,
-    materials,
+    sellCity: "-",
+    sellUpdated: "",
     rawMaterialCost,
+    activeReturn,
     returnedValue,
     realMaterialCost,
+    marketFee,
     totalCost,
     revenue,
     profit,
     margin,
-    profitPerFocus,
   };
 }
 
-function CraftProfitContent({
-  itemName,
-  itemId,
-  quality,
-  craftData,
-}: Props & { craftData: CraftData }) {
-  const [localData, setLocalData] = useState<CraftData>(craftData);
+function ProfitBox({
+  title,
+  result,
+}: {
+  title: string;
+  result: CraftProfitResult | null;
+}) {
+  if (!result) {
+    return (
+      <div className="albion-input rounded-xl p-5 text-yellow-100/60">
+        Brak danych.
+      </div>
+    );
+  }
+
+  return (
+    <div className="albion-input rounded-xl p-5">
+      <h4 className="text-xl font-black text-yellow-300 mb-4">{title}</h4>
+
+      <div className="grid grid-cols-2 gap-3 text-sm">
+        <p className="text-yellow-100/60">Sell price</p>
+        <p className="text-right font-bold">{formatNumber(result.sellPrice)}</p>
+
+        <p className="text-yellow-100/60">Material cost</p>
+        <p className="text-right font-bold">
+          {formatNumber(result.rawMaterialCost)}
+        </p>
+
+        <p className="text-yellow-100/60">Return</p>
+        <p className="text-right font-bold">
+          {result.activeReturn.toFixed(1)}%
+        </p>
+
+        <p className="text-yellow-100/60">Return value</p>
+        <p className="text-right font-bold text-cyan-300">
+          -{formatNumber(result.returnedValue)}
+        </p>
+
+        <p className="text-yellow-100/60">Market fee</p>
+        <p className="text-right font-bold">{formatNumber(result.marketFee)}</p>
+
+        <p className="text-yellow-100/60">Total cost</p>
+        <p className="text-right font-bold">{formatNumber(result.totalCost)}</p>
+
+        <p className="text-yellow-100/60">Profit</p>
+        <p
+          className={`text-right font-black ${
+            result.profit >= 0 ? "text-green-400" : "text-red-400"
+          }`}
+        >
+          {result.profit >= 0 ? "+" : ""}
+          {formatNumber(result.profit)}
+        </p>
+
+        <p className="text-yellow-100/60">Margin</p>
+        <p
+          className={`text-right font-black ${
+            result.margin >= 0 ? "text-green-400" : "text-red-400"
+          }`}
+        >
+          {result.margin.toFixed(1)}%
+        </p>
+      </div>
+    </div>
+  );
+}
+
+function CraftProfitContent({ craftData }: { craftData: CraftData }) {
   const [materials, setMaterials] = useState<Material[]>(craftData.materials);
-  const [sellPrice, setSellPrice] = useState(craftData.sellPrice);
-  const [returnRate, setReturnRate] = useState(craftData.returnRate);
-  const [stationFee, setStationFee] = useState(craftData.stationFee);
-  const [focusCost, setFocusCost] = useState(craftData.focusCost);
+
+  const [marketSellPrice, setMarketSellPrice] = useState(
+    craftData.market?.sellPrice || 0,
+  );
+
+  const [blackMarketSellPrice, setBlackMarketSellPrice] = useState(
+    craftData.blackMarket?.sellPrice || 0,
+  );
+
+  const [useFocus, setUseFocus] = useState(craftData.useFocus);
+  const [specLevel, setSpecLevel] = useState(craftData.specLevel);
+  const [marketFeePercent, setMarketFeePercent] = useState(
+    craftData.marketFeePercent,
+  );
+
+  const [baseReturn, setBaseReturn] = useState(craftData.baseReturn);
+  const [focusBonus, setFocusBonus] = useState(craftData.focusBonus);
+
+  const [marketResult, setMarketResult] = useState(craftData.market);
+  const [blackMarketResult, setBlackMarketResult] = useState(
+    craftData.blackMarket,
+  );
 
   function updateMaterialPrice(index: number, value: number) {
     setMaterials((prev) =>
@@ -92,75 +176,122 @@ function CraftProfitContent({
   }
 
   function calculateProfit() {
-    const newData = recalculateCraft(
-      localData,
+    const nextMarket = calculateResult({
       materials,
-      sellPrice,
-      returnRate,
-      stationFee,
-      focusCost,
-    );
+      sellPrice: marketSellPrice,
+      baseReturn,
+      focusBonus,
+      useFocus,
+      marketFeePercent,
+    });
 
-    setLocalData(newData);
+    const nextBlackMarket = calculateResult({
+      materials,
+      sellPrice: blackMarketSellPrice,
+      baseReturn,
+      focusBonus,
+      useFocus,
+      marketFeePercent,
+    });
+
+    setMarketResult({
+      ...nextMarket,
+      sellCity: craftData.market?.sellCity || "-",
+      sellUpdated: craftData.market?.sellUpdated || "",
+    });
+
+    setBlackMarketResult({
+      ...nextBlackMarket,
+      sellCity: craftData.blackMarket?.sellCity || "BlackMarket",
+      sellUpdated: craftData.blackMarket?.sellUpdated || "",
+    });
   }
 
   return (
     <>
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+      <div className="grid grid-cols-1 md:grid-cols-5 gap-4 mb-6">
         <div className="albion-input rounded-xl p-4">
-          <label className="text-yellow-100/60 text-sm">Sell price</label>
-
+          <label className="text-yellow-100/60 text-sm">Market buy offer</label>
           <input
             type="number"
-            value={sellPrice}
-            onChange={(event) => setSellPrice(Number(event.target.value))}
+            value={marketSellPrice}
+            onChange={(e) => setMarketSellPrice(Number(e.target.value))}
             className="w-full mt-2 bg-transparent text-2xl font-black text-yellow-300 outline-none"
           />
-
           <p className="text-xs text-yellow-100/50 mt-2">
-            Miasto: {localData.sellCity}
+            Miasto: {craftData.market?.sellCity || "-"}
           </p>
         </div>
 
         <div className="albion-input rounded-xl p-4">
-          <label className="text-yellow-100/60 text-sm">Zwrot %</label>
-
+          <label className="text-yellow-100/60 text-sm">Black Market buy</label>
           <input
             type="number"
-            value={returnRate}
-            onChange={(event) => setReturnRate(Number(event.target.value))}
+            value={blackMarketSellPrice}
+            onChange={(e) => setBlackMarketSellPrice(Number(e.target.value))}
+            className="w-full mt-2 bg-transparent text-2xl font-black text-yellow-300 outline-none"
+          />
+          <p className="text-xs text-yellow-100/50 mt-2">BlackMarket</p>
+        </div>
+
+        <div className="albion-input rounded-xl p-4">
+          <label className="flex items-center gap-2 text-yellow-100/70 text-sm">
+            <input
+              type="checkbox"
+              checked={useFocus}
+              onChange={(e) => setUseFocus(e.target.checked)}
+            />
+            Use focus
+          </label>
+          <p className="text-xs text-yellow-100/50 mt-3">
+            Focus dodaje bonus do returnu.
+          </p>
+        </div>
+
+        <div className="albion-input rounded-xl p-4">
+          <label className="text-yellow-100/60 text-sm">Spec level</label>
+          <input
+            type="number"
+            value={specLevel}
+            onChange={(e) => setSpecLevel(Number(e.target.value))}
+            className="w-full mt-2 bg-transparent text-2xl font-black text-yellow-300 outline-none"
+          />
+          <p className="text-xs text-yellow-100/50 mt-2">
+            Specki = większa szansa na lepszą quality.
+          </p>
+        </div>
+
+        <div className="albion-input rounded-xl p-4">
+          <label className="text-yellow-100/60 text-sm">Market fee %</label>
+          <input
+            type="number"
+            value={marketFeePercent}
+            onChange={(e) => setMarketFeePercent(Number(e.target.value))}
             className="w-full mt-2 bg-transparent text-2xl font-black text-yellow-300 outline-none"
           />
         </div>
 
         <div className="albion-input rounded-xl p-4">
-          <label className="text-yellow-100/60 text-sm">Station fee</label>
-
+          <label className="text-yellow-100/60 text-sm">Base return %</label>
           <input
             type="number"
-            value={stationFee}
-            onChange={(event) => setStationFee(Number(event.target.value))}
+            value={baseReturn}
+            onChange={(e) => setBaseReturn(Number(e.target.value))}
             className="w-full mt-2 bg-transparent text-2xl font-black text-yellow-300 outline-none"
           />
         </div>
 
         <div className="albion-input rounded-xl p-4">
-          <label className="text-yellow-100/60 text-sm">Focus cost</label>
-
+          <label className="text-yellow-100/60 text-sm">Focus bonus %</label>
           <input
             type="number"
-            value={focusCost}
-            onChange={(event) => setFocusCost(Number(event.target.value))}
-            className="w-full mt-2 bg-transparent text-2xl font-black text-yellow-300 outline-none"
+            value={focusBonus}
+            disabled={!useFocus}
+            onChange={(e) => setFocusBonus(Number(e.target.value))}
+            className="w-full mt-2 bg-transparent text-2xl font-black text-yellow-300 outline-none disabled:opacity-40"
           />
         </div>
       </div>
-
-      {materials.length === 0 && (
-        <div className="albion-input rounded-xl p-5 text-yellow-100/60 mb-6">
-          Nie znaleziono receptury albo cen materiałów dla tego itemu.
-        </div>
-      )}
 
       {materials.length > 0 && (
         <div className="overflow-x-auto rounded-xl border border-[#6f5735]/60 mb-6">
@@ -192,7 +323,6 @@ function CraftProfitContent({
                         unoptimized
                         className="w-10 h-10 bg-[#110d0a] rounded-lg border border-[#8d7248] p-1"
                       />
-
                       <span className="font-black text-yellow-100">
                         {material.item_id}
                       </span>
@@ -207,8 +337,8 @@ function CraftProfitContent({
                     <input
                       type="number"
                       value={material.price}
-                      onChange={(event) =>
-                        updateMaterialPrice(index, Number(event.target.value))
+                      onChange={(e) =>
+                        updateMaterialPrice(index, Number(e.target.value))
                       }
                       className="albion-input px-3 py-2 rounded-lg w-32 text-right text-yellow-100 outline-none"
                     />
@@ -238,71 +368,9 @@ function CraftProfitContent({
         Oblicz / Przelicz profit
       </button>
 
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <div className="albion-input rounded-xl p-5">
-          <p className="text-yellow-100/60 text-sm">Koszt materiałów</p>
-          <p className="text-3xl font-black text-yellow-300">
-            {formatNumber(localData.rawMaterialCost)}
-          </p>
-        </div>
-
-        <div className="albion-input rounded-xl p-5">
-          <p className="text-yellow-100/60 text-sm">Wartość zwrotu</p>
-          <p className="text-3xl font-black text-cyan-300">
-            -{formatNumber(localData.returnedValue)}
-          </p>
-        </div>
-
-        <div className="albion-input rounded-xl p-5">
-          <p className="text-yellow-100/60 text-sm">Fee</p>
-          <p className="text-3xl font-black text-yellow-300">
-            {formatNumber(localData.fee || 0)}
-          </p>
-        </div>
-
-        <div className="albion-input rounded-xl p-5">
-          <p className="text-yellow-100/60 text-sm">Realny koszt</p>
-          <p className="text-3xl font-black text-yellow-300">
-            {formatNumber(localData.totalCost)}
-          </p>
-        </div>
-
-        <div className="albion-input rounded-xl p-5">
-          <p className="text-yellow-100/60 text-sm">Revenue</p>
-          <p className="text-3xl font-black text-yellow-300">
-            {formatNumber(localData.revenue)}
-          </p>
-        </div>
-
-        <div className="albion-input rounded-xl p-5">
-          <p className="text-yellow-100/60 text-sm">Profit</p>
-          <p
-            className={`text-3xl font-black ${
-              localData.profit >= 0 ? "text-green-400" : "text-red-400"
-            }`}
-          >
-            {localData.profit >= 0 ? "+" : ""}
-            {formatNumber(localData.profit)}
-          </p>
-        </div>
-
-        <div className="albion-input rounded-xl p-5">
-          <p className="text-yellow-100/60 text-sm">Margin</p>
-          <p
-            className={`text-3xl font-black ${
-              localData.margin >= 0 ? "text-green-400" : "text-red-400"
-            }`}
-          >
-            {localData.margin.toFixed(1)}%
-          </p>
-        </div>
-
-        <div className="albion-input rounded-xl p-5">
-          <p className="text-yellow-100/60 text-sm">Profit / focus</p>
-          <p className="text-3xl font-black text-yellow-300">
-            {focusCost > 0 ? localData.profitPerFocus.toFixed(2) : "-"}
-          </p>
-        </div>
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <ProfitBox title="Market Profit" result={marketResult} />
+        <ProfitBox title="Black Market Profit" result={blackMarketResult} />
       </div>
     </>
   );
@@ -328,7 +396,6 @@ export default function CraftProfit({
 
         <div>
           <h3 className="text-2xl font-black text-yellow-300">Craft Profit</h3>
-
           <p className="text-yellow-100/60">
             {itemName} / Quality: {quality}
           </p>
@@ -337,17 +404,13 @@ export default function CraftProfit({
 
       {!craftData && (
         <div className="albion-input rounded-xl p-5 text-yellow-100/60">
-          Kliknij <b>Szukaj</b> po lewej stronie. Receptura, materiały i ceny
-          pobiorą się automatycznie.
+          Kliknij <b>Szukaj</b> po lewej stronie.
         </div>
       )}
 
       {craftData && (
         <CraftProfitContent
-          key={`${craftData.item_id}-${craftData.sellPrice}`}
-          itemName={itemName}
-          itemId={itemId}
-          quality={quality}
+          key={`${craftData.item_id}-${craftData.market?.sellPrice}-${craftData.blackMarket?.sellPrice}`}
           craftData={craftData}
         />
       )}

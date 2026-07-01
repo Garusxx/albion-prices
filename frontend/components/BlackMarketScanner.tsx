@@ -3,6 +3,8 @@
 import Image from "next/image";
 import { useState } from "react";
 
+import { API_BASE_URL } from "../lib/api";
+
 type ScanResult = {
   item_name: string;
   item_id: string;
@@ -31,7 +33,7 @@ export default function BlackMarketScanner() {
 
     try {
       const response = await fetch(
-        `http://localhost:4000/api/black-market/scan?minProfit=${minProfit}&quality=1`,
+        `${API_BASE_URL}/api/black-market/scan?minProfit=${minProfit}&quality=1`,
       );
 
       const data = await response.json();

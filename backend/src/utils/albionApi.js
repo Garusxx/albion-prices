@@ -4,8 +4,6 @@ import { getNumber } from "./numbers.js";
 const ITEMS_URL =
   "https://raw.githubusercontent.com/ao-data/ao-bin-dumps/master/items.json";
 
-let cachedItems = null;
-
 export async function fetchAlbionPrices(
   itemIds,
   quality = "1",
@@ -72,8 +70,12 @@ function flattenItems(value) {
   return results;
 }
 
+let cachedItems = null;
+
 export async function getItemsDump() {
-  if (cachedItems) return cachedItems;
+  if (cachedItems) {
+    return cachedItems;
+  }
 
   const response = await fetch(ITEMS_URL);
   if (!response.ok) throw new Error("Nie udało się pobrać items.json");
@@ -81,7 +83,7 @@ export async function getItemsDump() {
   const data = await response.json();
   cachedItems = flattenItems(data);
 
-  console.log("Loaded Albion items:", cachedItems.length);
+  console.log(`Loaded ${cachedItems.length} Albion items`);
 
   return cachedItems;
 }
@@ -127,4 +129,15 @@ export function applyEnchantToMaterial(materialId, enchant) {
   }
 
   return `${materialId}@${enchant}`;
+}
+
+export async function getSearchableItems() {
+  const dump = await getItemsDump();
+
+  return dump
+    .filter((item) => item.Index && item.LocalizedNames?.["EN-US"])
+    .map((item) => ({
+      id: item.Index,
+      name: item.LocalizedNames["EN-US"],
+    }));
 }
