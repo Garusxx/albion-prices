@@ -48,5 +48,5 @@ BACKEND_URL=https://TWOJ-BACKEND.railway.app
 ## Wazne
 
 Frontend odpytuje backend przez proxy `/api`, wiec po wpisaniu albo zmianie
-`BACKEND_URL` zrob redeploy frontendu. Produkcyjny build bez tej zmiennej
-specjalnie sie nie uda, zeby nie zbudowac aplikacji wskazujacej na `localhost`.
+`BACKEND_URL` zrob redeploy frontendu. Ta zmienna jest czytana przez frontend
+server w runtime.
