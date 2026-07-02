@@ -41,10 +41,12 @@ RAILWAY_DOCKERFILE_PATH=Dockerfile.prod
 BACKEND_URL=https://TWOJ-BACKEND.railway.app
 ```
 
-4. Settings -> Networking -> Public Networking -> Generate Domain.
-5. Otworz frontend domain.
+4. Redeploy frontend service po ustawieniu `BACKEND_URL`.
+5. Settings -> Networking -> Public Networking -> Generate Domain.
+6. Otworz frontend domain.
 
 ## Wazne
 
 Frontend odpytuje backend przez proxy `/api`, wiec po wpisaniu albo zmianie
-`BACKEND_URL` zrob redeploy frontendu.
+`BACKEND_URL` zrob redeploy frontendu. Produkcyjny build bez tej zmiennej
+specjalnie sie nie uda, zeby nie zbudowac aplikacji wskazujacej na `localhost`.
