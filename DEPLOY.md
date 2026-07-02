@@ -8,18 +8,18 @@ Copy the example env file:
 cp .env.production.example .env
 ```
 
-Set `NEXT_PUBLIC_API_BASE_URL` to the public backend URL.
+Set `BACKEND_URL` to the backend URL reachable from the frontend container.
 
 For local production test:
 
 ```bash
-NEXT_PUBLIC_API_BASE_URL=http://localhost:4000
+BACKEND_URL=http://backend:4000
 ```
 
 For a VPS:
 
 ```bash
-NEXT_PUBLIC_API_BASE_URL=http://YOUR_SERVER_IP:4000
+BACKEND_URL=http://YOUR_SERVER_IP:4000
 ```
 
 ## 2. Build and run

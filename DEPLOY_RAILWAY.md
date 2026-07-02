@@ -38,7 +38,7 @@ https://TWOJ-BACKEND.railway.app/health
 
 ```txt
 RAILWAY_DOCKERFILE_PATH=Dockerfile.prod
-NEXT_PUBLIC_API_BASE_URL=https://TWOJ-BACKEND.railway.app
+BACKEND_URL=https://TWOJ-BACKEND.railway.app
 ```
 
 4. Settings -> Networking -> Public Networking -> Generate Domain.
@@ -46,6 +46,5 @@ NEXT_PUBLIC_API_BASE_URL=https://TWOJ-BACKEND.railway.app
 
 ## Wazne
 
-`NEXT_PUBLIC_API_BASE_URL` jest wbudowywane podczas buildu frontendu, wiec po
-wpisaniu albo zmianie backend domain zrob redeploy frontendu.
-
+Frontend odpytuje backend przez proxy `/api`, wiec po wpisaniu albo zmianie
+`BACKEND_URL` zrob redeploy frontendu.
