@@ -9,17 +9,27 @@ type RouteContext = {
 function getBackendUrl() {
   const backendUrl = process.env.BACKEND_URL;
 
-  if (!backendUrl && process.env.NODE_ENV === "production") {
-    throw new Error("BACKEND_URL must be set for the frontend service.");
-  }
-
-  return backendUrl || DEFAULT_BACKEND_URL;
+  return (
+    backendUrl ||
+    (process.env.NODE_ENV === "production" ? null : DEFAULT_BACKEND_URL)
+  );
 }
 
 async function proxyRequest(request: Request, context: RouteContext) {
   const { path } = await context.params;
   const sourceUrl = new URL(request.url);
-  const targetUrl = new URL(`/api/${path.join("/")}`, getBackendUrl());
+  const backendUrl = getBackendUrl();
+
+  if (!backendUrl) {
+    return Response.json(
+      {
+        error: "BACKEND_URL is not configured for the frontend service.",
+      },
+      { status: 500 },
+    );
+  }
+
+  const targetUrl = new URL(`/api/${path.join("/")}`, backendUrl);
 
   targetUrl.search = sourceUrl.search;
 

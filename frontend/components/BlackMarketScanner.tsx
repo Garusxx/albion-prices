@@ -24,11 +24,25 @@ function formatNumber(value: number) {
   return value.toLocaleString("pl-PL");
 }
 
+function parseProfitValue(value: string) {
+  const normalized = value.trim().toLowerCase().replace(/\s/g, "");
+
+  if (!normalized) return 0;
+
+  const match = normalized.match(/^(\d+(?:[.,]\d+)?)(k|m)?$/);
+  if (!match) return null;
+
+  const amount = Number(match[1].replace(",", "."));
+  const multiplier = match[2] === "m" ? 1_000_000 : match[2] === "k" ? 1_000 : 1;
+
+  return Math.round(amount * multiplier);
+}
+
 export default function BlackMarketScanner() {
   const [results, setResults] = useState<ScanResult[]>([]);
   const [loading, setLoading] = useState(false);
   const [hasSearched, setHasSearched] = useState(false);
-  const [minProfit, setMinProfit] = useState(400000);
+  const [minProfit, setMinProfit] = useState("400000");
   const [tier, setTier] = useState("8");
   const [maxPriceAgeHours, setMaxPriceAgeHours] = useState("24");
   const [error, setError] = useState("");
@@ -40,10 +54,17 @@ export default function BlackMarketScanner() {
     setResults([]);
 
     const selectedTier = Number(tier);
+    const parsedMinProfit = parseProfitValue(minProfit);
+
+    if (parsedMinProfit === null) {
+      setLoading(false);
+      setError("Wpisz profit jako liczbe, np. 400000, 400k albo 1.5m");
+      return;
+    }
 
     try {
       const response = await fetch(
-        `${API_BASE_URL}/api/black-market/scan?minProfit=${minProfit}&minTier=${selectedTier}&maxTier=${selectedTier}&maxPriceAgeHours=${maxPriceAgeHours}`,
+        `${API_BASE_URL}/api/black-market/scan?minProfit=${parsedMinProfit}&minTier=${selectedTier}&maxTier=${selectedTier}&maxPriceAgeHours=${maxPriceAgeHours}`,
       );
 
       const data = await response.json();
@@ -54,7 +75,11 @@ export default function BlackMarketScanner() {
         return;
       }
 
-      setResults(Array.isArray(data) ? data : []);
+      setResults(
+        Array.isArray(data)
+          ? data.filter((result) => result.profit >= parsedMinProfit)
+          : [],
+      );
     } catch (err) {
       console.error("SCAN ERROR:", err);
       setError("Nie udało się połączyć z backendem");
@@ -92,11 +117,12 @@ export default function BlackMarketScanner() {
           </select>
 
           <input
-            type="number"
+            type="text"
+            inputMode="numeric"
             value={minProfit}
-            onChange={(e) => setMinProfit(Number(e.target.value))}
+            onChange={(e) => setMinProfit(e.target.value)}
             className="albion-input px-3 py-3 rounded-xl w-full sm:w-44 text-yellow-100 outline-none"
-            placeholder="Min profit"
+            placeholder="Min profit, np. 400k"
           />
 
           <select

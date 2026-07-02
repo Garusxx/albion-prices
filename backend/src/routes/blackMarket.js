@@ -95,6 +95,22 @@ function isFreshPrice(priceDate, maxAgeHours) {
   return Date.now() - updatedAt <= maxAgeMs;
 }
 
+function getProfitNumber(value, fallback = 0) {
+  if (typeof value !== "string") return getNumber(value, fallback);
+
+  const normalized = value.trim().toLowerCase().replace(/\s/g, "");
+  if (!normalized) return fallback;
+
+  const match = normalized.match(/^(\d+(?:[.,]\d+)?)(k|m)?$/);
+  if (!match) return fallback;
+
+  const amount = Number(match[1].replace(",", "."));
+  const multiplier =
+    match[2] === "m" ? 1_000_000 : match[2] === "k" ? 1_000 : 1;
+
+  return Number.isFinite(amount) ? Math.round(amount * multiplier) : fallback;
+}
+
 async function fetchBlackMarketSold7d(results) {
   const soldByItem = new Map();
   const resultsByQuality = groupItemsByQuality(results);
@@ -134,7 +150,7 @@ async function fetchBlackMarketSold7d(results) {
 }
 
 router.get("/scan", async (req, res) => {
-  const minProfit = getNumber(req.query.minProfit, 400000);
+  const minProfit = getProfitNumber(req.query.minProfit, 400000);
   const maxResults = getNumber(req.query.maxResults, 250);
   const minTier = getNumber(req.query.minTier, 6);
   const maxTier = getNumber(req.query.maxTier, minTier);
