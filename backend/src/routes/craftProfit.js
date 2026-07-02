@@ -171,9 +171,6 @@ async function calculateCraftProfitForItem({
     ),
   ];
 
-  console.log("CRAFT ITEM:", itemId);
-  console.log("MATERIAL PRICE IDS:", materialItemIds);
-
   const materialPrices = await fetchAlbionPrices(materialItemIds, "1");
   const itemPrices = await fetchAlbionPrices([itemId], itemPriceQuality);
   const selectedRecipe = chooseBestRecipe(recipeOptions, materialPrices);

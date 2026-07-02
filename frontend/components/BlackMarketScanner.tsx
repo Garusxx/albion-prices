@@ -8,9 +8,15 @@ import { API_BASE_URL } from "../lib/api";
 type ScanResult = {
   item_name: string;
   item_id: string;
+  tier?: number;
+  enchant?: string;
+  quality?: string;
   buy_city: string;
   buy_price: number;
+  buy_city_updated_at?: string;
   black_market_price: number;
+  black_market_updated_at?: string;
+  black_market_sold_7d?: number;
   profit: number;
 };
 
@@ -23,6 +29,8 @@ export default function BlackMarketScanner() {
   const [loading, setLoading] = useState(false);
   const [hasSearched, setHasSearched] = useState(false);
   const [minProfit, setMinProfit] = useState(400000);
+  const [tier, setTier] = useState("8");
+  const [maxPriceAgeHours, setMaxPriceAgeHours] = useState("24");
   const [error, setError] = useState("");
 
   async function scanBlackMarket() {
@@ -31,9 +39,11 @@ export default function BlackMarketScanner() {
     setError("");
     setResults([]);
 
+    const selectedTier = Number(tier);
+
     try {
       const response = await fetch(
-        `${API_BASE_URL}/api/black-market/scan?minProfit=${minProfit}&quality=1`,
+        `${API_BASE_URL}/api/black-market/scan?minProfit=${minProfit}&minTier=${selectedTier}&maxTier=${selectedTier}&maxPriceAgeHours=${maxPriceAgeHours}`,
       );
 
       const data = await response.json();
@@ -63,12 +73,24 @@ export default function BlackMarketScanner() {
           </h3>
 
           <p className="text-yellow-100/60 text-sm">
-            Szuka T8 itemów, które można kupić w mieście i sprzedać instant na
-            Black Market.
+            Skanuje craftowalne itemy z wybranego tieru, które można kupić w
+            mieście i sprzedać instant na Black Market.
           </p>
         </div>
 
         <div className="flex flex-col sm:flex-row gap-3">
+          <select
+            value={tier}
+            onChange={(e) => setTier(e.target.value)}
+            className="albion-input px-3 py-3 rounded-xl w-full sm:w-36 text-yellow-100 outline-none"
+          >
+            <option value="4">T4</option>
+            <option value="5">T5</option>
+            <option value="6">T6</option>
+            <option value="7">T7</option>
+            <option value="8">T8</option>
+          </select>
+
           <input
             type="number"
             value={minProfit}
@@ -76,6 +98,16 @@ export default function BlackMarketScanner() {
             className="albion-input px-3 py-3 rounded-xl w-full sm:w-44 text-yellow-100 outline-none"
             placeholder="Min profit"
           />
+
+          <select
+            value={maxPriceAgeHours}
+            onChange={(e) => setMaxPriceAgeHours(e.target.value)}
+            className="albion-input px-3 py-3 rounded-xl w-full sm:w-36 text-yellow-100 outline-none"
+          >
+            <option value="4">Ceny max 4h</option>
+            <option value="12">Ceny max 12h</option>
+            <option value="24">Ceny max 24h</option>
+          </select>
 
           <button
             type="button"
@@ -90,7 +122,8 @@ export default function BlackMarketScanner() {
 
       {loading && (
         <div className="albion-input rounded-xl p-5 mb-4 text-yellow-100/70">
-          Szukam okazji na Black Market...
+          Szukam okazji na Black Market w T{tier}.0-.3, quality 1-5, ceny max{" "}
+          {maxPriceAgeHours}h...
         </div>
       )}
 
@@ -129,6 +162,7 @@ export default function BlackMarketScanner() {
                 <th className="p-3 text-left">Kup w</th>
                 <th className="p-3 text-right">Cena kupna</th>
                 <th className="p-3 text-right">BM instant</th>
+                <th className="p-3 text-right">BM szt. 7d</th>
                 <th className="p-3 text-right">Profit</th>
               </tr>
             </thead>
@@ -150,6 +184,12 @@ export default function BlackMarketScanner() {
                       <span className="font-black text-yellow-100">
                         {result.item_name}
                       </span>
+                      {result.tier && (
+                        <span className="text-xs text-yellow-100/50">
+                          T{result.tier}.{result.enchant || "0"}
+                          {result.quality ? ` Q${result.quality}` : ""}
+                        </span>
+                      )}
                     </div>
                   </td>
 
@@ -161,6 +201,10 @@ export default function BlackMarketScanner() {
 
                   <td className="p-3 text-right">
                     {formatNumber(result.black_market_price)}
+                  </td>
+
+                  <td className="p-3 text-right text-yellow-100/80">
+                    {formatNumber(result.black_market_sold_7d || 0)}
                   </td>
 
                   <td className="p-3 text-right text-green-400 font-black">

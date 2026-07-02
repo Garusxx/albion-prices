@@ -48,3 +48,13 @@ body {
     inset 0 2px 8px rgba(0, 0, 0, 0.65),
     0 1px 0 rgba(255, 255, 255, 0.08);
 }
+
+select.albion-input option {
+  background: #17120f;
+  color: #fef3c7;
+}
+
+select.albion-input option:checked {
+  background: #7b613b;
+  color: #fff7d6;
+}
