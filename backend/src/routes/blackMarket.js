@@ -95,10 +95,6 @@ function groupItemsByQuality(items) {
   return groups;
 }
 
-function getHistoryLookupKey(itemId, quality) {
-  return `${itemId}|${quality}`;
-}
-
 function isFreshPrice(priceDate, maxAgeHours) {
   const updatedAt = new Date(priceDate).getTime();
 
@@ -123,44 +119,6 @@ function getProfitNumber(value, fallback = 0) {
     match[2] === "m" ? 1_000_000 : match[2] === "k" ? 1_000 : 1;
 
   return Number.isFinite(amount) ? Math.round(amount * multiplier) : fallback;
-}
-
-async function fetchBlackMarketSold7d(results) {
-  const soldByItem = new Map();
-  const resultsByQuality = groupItemsByQuality(results);
-
-  for (const [quality, qualityResults] of resultsByQuality) {
-    const itemIds = [
-      ...new Set(qualityResults.map((result) => result.item_id)),
-    ];
-
-    for (const batch of chunkItems(itemIds, SCAN_BATCH_SIZE)) {
-      const url = `https://europe.albion-online-data.com/api/v2/stats/history/${batch
-        .map((itemId) => encodeURIComponent(itemId))
-        .join(",")}.json?locations=BlackMarket&qualities=${quality}&time-scale=24`;
-
-      const response = await fetch(url);
-      if (!response.ok) continue;
-
-      const data = await response.json();
-      const historyItems = Array.isArray(data) ? data : [];
-
-      for (const historyItem of historyItems) {
-        const itemId = historyItem.item_id;
-        const itemQuality = String(historyItem.quality || quality);
-        const history = Array.isArray(historyItem.data)
-          ? historyItem.data
-          : [];
-        const sold7d = history
-          .slice(-7)
-          .reduce((sum, day) => sum + getNumber(day.item_count), 0);
-
-        soldByItem.set(getHistoryLookupKey(itemId, itemQuality), sold7d);
-      }
-    }
-  }
-
-  return soldByItem;
 }
 
 router.get("/scan", async (req, res) => {
@@ -265,17 +223,7 @@ router.get("/scan", async (req, res) => {
 
     results.sort((a, b) => b.profit - a.profit);
 
-    const topResults = results.slice(0, maxResults);
-    const soldByItem = await fetchBlackMarketSold7d(topResults);
-
-    res.json(
-      topResults.map((result) => ({
-        ...result,
-        black_market_sold_7d:
-          soldByItem.get(getHistoryLookupKey(result.item_id, result.quality)) ||
-          0,
-      })),
-    );
+    res.json(results.slice(0, maxResults));
   } catch (error) {
     console.error("BLACK MARKET SCAN ERROR:", error);
 

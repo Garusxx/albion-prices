@@ -16,7 +16,6 @@ type ScanResult = {
   buy_city_updated_at?: string;
   black_market_price: number;
   black_market_updated_at?: string;
-  black_market_sold_7d?: number;
   profit: number;
 };
 
@@ -141,8 +140,8 @@ export default function BlackMarketScanner() {
                 <th className="p-3 text-left">Item</th>
                 <th className="p-3 text-left">Kup w</th>
                 <th className="p-3 text-right">Cena kupna</th>
-                <th className="p-3 text-right">BM instant</th>
-                <th className="p-3 text-right">BM szt. 7d</th>
+                <th className="p-3 text-right">BM skupuje za</th>
+                <th className="p-3 text-right">BM update</th>
                 <th className="p-3 text-right">Profit</th>
               </tr>
             </thead>
@@ -183,8 +182,12 @@ export default function BlackMarketScanner() {
                     {formatNumber(result.black_market_price)}
                   </td>
 
-                  <td className="p-3 text-right text-yellow-100/80">
-                    {formatNumber(result.black_market_sold_7d || 0)}
+                  <td className="p-3 text-right text-yellow-100/60 text-sm">
+                    {result.black_market_updated_at
+                      ? new Date(
+                          result.black_market_updated_at,
+                        ).toLocaleString("pl-PL")
+                      : "-"}
                   </td>
 
                   <td className="p-3 text-right text-green-400 font-black">
