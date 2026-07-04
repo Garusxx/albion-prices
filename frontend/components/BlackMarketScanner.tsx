@@ -24,27 +24,11 @@ function formatNumber(value: number) {
   return value.toLocaleString("pl-PL");
 }
 
-function parseProfitValue(value: string) {
-  const normalized = value.trim().toLowerCase().replace(/\s/g, "");
-
-  if (!normalized) return 0;
-
-  const match = normalized.match(/^(\d+(?:[.,]\d+)?)(k|m)?$/);
-  if (!match) return null;
-
-  const amount = Number(match[1].replace(",", "."));
-  const multiplier = match[2] === "m" ? 1_000_000 : match[2] === "k" ? 1_000 : 1;
-
-  return Math.round(amount * multiplier);
-}
-
 export default function BlackMarketScanner() {
   const [results, setResults] = useState<ScanResult[]>([]);
   const [loading, setLoading] = useState(false);
   const [hasSearched, setHasSearched] = useState(false);
-  const [minProfit, setMinProfit] = useState("400000");
   const [tier, setTier] = useState("8");
-  const [maxPriceAgeHours, setMaxPriceAgeHours] = useState("24");
   const [error, setError] = useState("");
 
   async function scanBlackMarket() {
@@ -54,17 +38,10 @@ export default function BlackMarketScanner() {
     setResults([]);
 
     const selectedTier = Number(tier);
-    const parsedMinProfit = parseProfitValue(minProfit);
-
-    if (parsedMinProfit === null) {
-      setLoading(false);
-      setError("Wpisz profit jako liczbe, np. 400000, 400k albo 1.5m");
-      return;
-    }
 
     try {
       const response = await fetch(
-        `${API_BASE_URL}/api/black-market/scan?minProfit=${parsedMinProfit}&minTier=${selectedTier}&maxTier=${selectedTier}&maxPriceAgeHours=${maxPriceAgeHours}`,
+        `${API_BASE_URL}/api/black-market/scan?minTier=${selectedTier}&maxTier=${selectedTier}&maxPriceAgeHours=24`,
       );
 
       const data = await response.json();
@@ -75,11 +52,7 @@ export default function BlackMarketScanner() {
         return;
       }
 
-      setResults(
-        Array.isArray(data)
-          ? data.filter((result) => result.profit >= parsedMinProfit)
-          : [],
-      );
+      setResults(Array.isArray(data) ? data : []);
     } catch (err) {
       console.error("SCAN ERROR:", err);
       setError("Nie udało się połączyć z backendem");
@@ -98,8 +71,8 @@ export default function BlackMarketScanner() {
           </h3>
 
           <p className="text-yellow-100/60 text-sm">
-            Skanuje craftowalne itemy z wybranego tieru, które można kupić w
-            mieście i sprzedać instant na Black Market.
+            Skanuje itemy z wybranego tieru i pokazuje najlepsze profity z cen
+            max 24h.
           </p>
         </div>
 
@@ -116,25 +89,6 @@ export default function BlackMarketScanner() {
             <option value="8">T8</option>
           </select>
 
-          <input
-            type="text"
-            inputMode="numeric"
-            value={minProfit}
-            onChange={(e) => setMinProfit(e.target.value)}
-            className="albion-input px-3 py-3 rounded-xl w-full sm:w-44 text-yellow-100 outline-none"
-            placeholder="Min profit, np. 400k"
-          />
-
-          <select
-            value={maxPriceAgeHours}
-            onChange={(e) => setMaxPriceAgeHours(e.target.value)}
-            className="albion-input px-3 py-3 rounded-xl w-full sm:w-36 text-yellow-100 outline-none"
-          >
-            <option value="4">Ceny max 4h</option>
-            <option value="12">Ceny max 12h</option>
-            <option value="24">Ceny max 24h</option>
-          </select>
-
           <button
             type="button"
             onClick={scanBlackMarket}
@@ -148,14 +102,14 @@ export default function BlackMarketScanner() {
 
       {loading && (
         <div className="albion-input rounded-xl p-5 mb-4 text-yellow-100/70">
-          Szukam okazji na Black Market w T{tier}.0-.4, quality 1-5, ceny max{" "}
-          {maxPriceAgeHours}h...
+          Szukam najlepszych profitów na Black Market w T{tier}.0-.4, quality
+          1-5, ceny max 24h...
         </div>
       )}
 
       {!loading && !hasSearched && (
         <div className="albion-input rounded-xl p-5 mb-4 text-yellow-100/60">
-          Wpisz minimalny profit i kliknij Scan Black Market.
+          Wybierz tier i kliknij Scan Black Market.
         </div>
       )}
 
@@ -174,7 +128,7 @@ export default function BlackMarketScanner() {
           </p>
 
           <p className="text-yellow-100/60 text-sm">
-            Spróbuj zmniejszyć minimalny profit, np. 10000, 1000 albo 1.
+            Brak dodatnich profitów dla tego tieru przy cenach z ostatnich 24h.
           </p>
         </div>
       )}

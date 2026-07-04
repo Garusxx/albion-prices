@@ -14,7 +14,18 @@ import {
 const router = express.Router();
 const SCAN_BATCH_SIZE = 100;
 const DEFAULT_SCAN_LIMIT = 1200;
+const DEFAULT_MIN_PROFIT = 1;
 const DEFAULT_MAX_PRICE_AGE_HOURS = 24;
+const BLACK_MARKET_ITEM_PATTERNS = [
+  /^T\d+_2H_/,
+  /^T\d+_MAIN_/,
+  /^T\d+_OFF_/,
+  /^T\d+_HEAD_/,
+  /^T\d+_ARMOR_/,
+  /^T\d+_SHOES_/,
+  /^T\d+_BAG$/,
+  /^T\d+_CAPE$/,
+];
 
 function chunkItems(items, size) {
   const chunks = [];
@@ -42,6 +53,9 @@ function shouldScanBlackMarketItem(item, minTier, maxTier) {
   if (itemId.includes("@")) return false;
   if (item?.["@showinmarketplace"] === "false") return false;
   if (!item?.craftingrequirements) return false;
+  if (!BLACK_MARKET_ITEM_PATTERNS.some((pattern) => pattern.test(itemId))) {
+    return false;
+  }
 
   return true;
 }
@@ -150,7 +164,7 @@ async function fetchBlackMarketSold7d(results) {
 }
 
 router.get("/scan", async (req, res) => {
-  const minProfit = getProfitNumber(req.query.minProfit, 400000);
+  const minProfit = getProfitNumber(req.query.minProfit, DEFAULT_MIN_PROFIT);
   const maxResults = getNumber(req.query.maxResults, 250);
   const minTier = getNumber(req.query.minTier, 6);
   const maxTier = getNumber(req.query.maxTier, minTier);
