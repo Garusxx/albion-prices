@@ -23,10 +23,21 @@ export async function fetchAlbionPrices(
   return response.json();
 }
 
-export function getLowestSellOffer(prices, itemId) {
+export function isFreshPrice(priceDate, maxAgeHours) {
+  if (!maxAgeHours || maxAgeHours <= 0) return true;
+
+  const updatedAt = new Date(priceDate).getTime();
+  if (!Number.isFinite(updatedAt) || updatedAt <= 0) return false;
+
+  return Date.now() - updatedAt <= maxAgeHours * 60 * 60 * 1000;
+}
+
+export function getLowestSellOffer(prices, itemId, options = {}) {
+  const { maxAgeHours = 0 } = options;
   const validOffers = prices
     .filter((price) => price.item_id === itemId)
     .filter((price) => getNumber(price.sell_price_min) > 0)
+    .filter((price) => isFreshPrice(price.sell_price_min_date, maxAgeHours))
     .map((price) => ({
       price: getNumber(price.sell_price_min),
       city: price.city,
@@ -37,10 +48,12 @@ export function getLowestSellOffer(prices, itemId) {
   return validOffers[0] || { price: 0, city: "-", updated: "" };
 }
 
-export function getHighestBuyOffer(prices, itemId) {
+export function getHighestBuyOffer(prices, itemId, options = {}) {
+  const { maxAgeHours = 0 } = options;
   const validOffers = prices
     .filter((price) => price.item_id === itemId)
     .filter((price) => getNumber(price.buy_price_max) > 0)
+    .filter((price) => isFreshPrice(price.buy_price_max_date, maxAgeHours))
     .map((price) => ({
       price: getNumber(price.buy_price_max),
       city: price.city,

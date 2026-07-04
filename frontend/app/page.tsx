@@ -61,6 +61,7 @@ export type CraftData = {
   activeReturn: number;
   marketFeePercent: number;
   specLevel: number;
+  maxPriceAgeHours?: number;
   craftedAmount: number;
 
   materials: {
@@ -215,6 +216,7 @@ export default function Home() {
               marketFeePercent: 0,
               specLevel: 0,
               quality,
+              maxPriceAgeHours: 24,
             }),
           }),
         ]);

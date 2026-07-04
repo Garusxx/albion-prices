@@ -159,7 +159,7 @@ router.get("/scan", async (req, res) => {
     req.query.maxPriceAgeHours || req.query.maxBmPriceAgeHours,
     DEFAULT_MAX_PRICE_AGE_HOURS,
   );
-  const enchants = ["0", "1", "2", "3"];
+  const enchants = ["0", "1", "2", "3", "4"];
 
   const results = [];
 

@@ -269,7 +269,9 @@ function CraftProfitContent({ craftData }: { craftData: CraftData }) {
             onChange={(e) => setBlackMarketSellPrice(Number(e.target.value))}
             className="w-full mt-2 bg-transparent text-2xl font-black text-yellow-300 outline-none"
           />
-          <p className="text-xs text-yellow-100/50 mt-2">BlackMarket</p>
+          <p className="text-xs text-yellow-100/50 mt-2">
+            Update: {formatDate(craftData.blackMarket?.sellUpdated || "")}
+          </p>
         </div>
 
         <div className="albion-input rounded-xl p-4">

@@ -6,32 +6,14 @@ import {
   getCraftResourceOptions,
   getPriceQualityForItem,
   normalizeResource,
+  applyEnchantToMaterial,
   fetchAlbionPrices,
   getLowestSellOffer,
   getHighestBuyOffer,
 } from "../utils/albionApi.js";
 
 const router = express.Router();
-
-function isRefinedMaterial(materialId) {
-  return (
-    materialId.includes("_CLOTH") ||
-    materialId.includes("_LEATHER") ||
-    materialId.includes("_METALBAR") ||
-    materialId.includes("_PLANKS") ||
-    materialId.includes("_STONEBLOCK")
-  );
-}
-
-function applyTierAndEnchantToMaterial(materialId, enchant) {
-  if (!enchant || enchant === "0") return materialId;
-
-  if (isRefinedMaterial(materialId)) {
-    return `${materialId}_LEVEL${enchant}@${enchant}`;
-  }
-
-  return materialId;
-}
+const DEFAULT_MAX_PRICE_AGE_HOURS = 24;
 
 function calculateProfit({
   materials,
@@ -92,15 +74,17 @@ function getRecipeResources(item, baseItemId, enchant) {
         .filter((resource) => resource !== null)
         .map((resource) => ({
           ...resource,
-          item_id: applyTierAndEnchantToMaterial(resource.item_id, enchant),
+          item_id: applyEnchantToMaterial(resource.item_id, enchant),
         })),
     )
     .filter((resources) => resources.length > 0);
 }
 
-function buildPricedMaterials(resources, prices) {
+function buildPricedMaterials(resources, prices, maxPriceAgeHours) {
   return resources.map((resource) => {
-    const offer = getLowestSellOffer(prices, resource.item_id);
+    const offer = getLowestSellOffer(prices, resource.item_id, {
+      maxAgeHours: maxPriceAgeHours,
+    });
 
     return {
       item_id: resource.item_id,
@@ -114,9 +98,13 @@ function buildPricedMaterials(resources, prices) {
   });
 }
 
-function chooseBestRecipe(recipeOptions, prices) {
+function chooseBestRecipe(recipeOptions, prices, maxPriceAgeHours) {
   const pricedRecipes = recipeOptions.map((resources, index) => {
-    const materials = buildPricedMaterials(resources, prices);
+    const materials = buildPricedMaterials(
+      resources,
+      prices,
+      maxPriceAgeHours,
+    );
     const missingPrices = materials.filter((material) => material.price <= 0);
     const rawMaterialCost = materials.reduce(
       (sum, material) => sum + material.total,
@@ -148,6 +136,7 @@ async function calculateCraftProfitForItem({
   marketFeePercent,
   specLevel,
   quality,
+  maxPriceAgeHours,
 }) {
   const baseItemId = itemId.split("@")[0];
   const enchant = itemId.includes("@") ? itemId.split("@")[1] : "0";
@@ -173,16 +162,24 @@ async function calculateCraftProfitForItem({
 
   const materialPrices = await fetchAlbionPrices(materialItemIds, "1");
   const itemPrices = await fetchAlbionPrices([itemId], itemPriceQuality);
-  const selectedRecipe = chooseBestRecipe(recipeOptions, materialPrices);
+  const selectedRecipe = chooseBestRecipe(
+    recipeOptions,
+    materialPrices,
+    maxPriceAgeHours,
+  );
   const materials = selectedRecipe?.materials || [];
 
-  const marketOffer = getHighestBuyOffer(itemPrices, itemId);
+  const marketOffer = getHighestBuyOffer(itemPrices, itemId, {
+    maxAgeHours: maxPriceAgeHours,
+  });
 
   const blackMarketPrices = await fetchAlbionPrices([itemId], itemPriceQuality, [
     "BlackMarket",
   ]);
 
-  const blackMarketOffer = getHighestBuyOffer(blackMarketPrices, itemId);
+  const blackMarketOffer = getHighestBuyOffer(blackMarketPrices, itemId, {
+    maxAgeHours: maxPriceAgeHours,
+  });
 
   const missingMaterialPrices = materials.some(
     (material) => material.price <= 0,
@@ -221,6 +218,7 @@ async function calculateCraftProfitForItem({
     activeReturn: baseReturn + (useFocus ? focusBonus : 0),
     marketFeePercent,
     specLevel,
+    maxPriceAgeHours,
     craftedAmount,
     selectedRecipeIndex: selectedRecipe?.index || 0,
     recipeOptionsCount: recipeOptions.length,
@@ -258,6 +256,10 @@ router.post("/:itemId", async (req, res) => {
     const marketFeePercent = getNumber(req.body.marketFeePercent, 0);
     const specLevel = getNumber(req.body.specLevel, 0);
     const quality = String(req.body.quality || "1");
+    const maxPriceAgeHours = getNumber(
+      req.body.maxPriceAgeHours,
+      DEFAULT_MAX_PRICE_AGE_HOURS,
+    );
 
     let result = await calculateCraftProfitForItem({
       itemId,
@@ -267,6 +269,7 @@ router.post("/:itemId", async (req, res) => {
       marketFeePercent,
       specLevel,
       quality,
+      maxPriceAgeHours,
     });
 
     if (!result && itemId !== baseItemId) {
@@ -278,6 +281,7 @@ router.post("/:itemId", async (req, res) => {
         marketFeePercent,
         specLevel,
         quality,
+        maxPriceAgeHours,
       });
     }
 
@@ -293,6 +297,7 @@ router.post("/:itemId", async (req, res) => {
         activeReturn: baseReturn + (useFocus ? focusBonus : 0),
         marketFeePercent,
         specLevel,
+        maxPriceAgeHours,
         craftedAmount: 1,
         materials: [],
         missingMaterialPrices: true,

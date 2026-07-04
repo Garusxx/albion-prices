@@ -148,7 +148,7 @@ export default function BlackMarketScanner() {
 
       {loading && (
         <div className="albion-input rounded-xl p-5 mb-4 text-yellow-100/70">
-          Szukam okazji na Black Market w T{tier}.0-.3, quality 1-5, ceny max{" "}
+          Szukam okazji na Black Market w T{tier}.0-.4, quality 1-5, ceny max{" "}
           {maxPriceAgeHours}h...
         </div>
       )}
